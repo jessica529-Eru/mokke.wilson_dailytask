@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
-import type { RewardDTO, TaskTemplateDTO } from "@/lib/types";
+import type { MemberDTO, RewardDTO, TaskTemplateDTO } from "@/lib/types";
 
 type StreakDTO = {
   roomMemberId: number;
@@ -12,6 +12,8 @@ type StreakDTO = {
   longestStreak: number;
   lastActiveLocalDate: string | null;
 };
+
+type MeResponse = { member: { id: number } | null };
 
 const TYPE_LABEL: Record<string, string> = {
   fixed_item: "固定獎品",
@@ -26,23 +28,31 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
   const [rewards, setRewards] = useState<RewardDTO[]>([]);
   const [tasks, setTasks] = useState<TaskTemplateDTO[]>([]);
   const [streaks, setStreaks] = useState<StreakDTO[]>([]);
+  const [members, setMembers] = useState<MemberDTO[]>([]);
+  const [myId, setMyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   async function load() {
     try {
-      const [rewardData, taskData, streakData] = await Promise.all([
+      const [rewardData, taskData, streakData, roomData, me] = await Promise.all([
         apiFetch<{ rewards: RewardDTO[] }>(`/api/rooms/${roomId}/rewards`),
         apiFetch<{ tasks: TaskTemplateDTO[] }>(`/api/rooms/${roomId}/tasks`),
         apiFetch<{ streaks: StreakDTO[] }>(`/api/rooms/${roomId}/streaks`),
+        apiFetch<{ members: MemberDTO[] }>(`/api/rooms/${roomId}`),
+        apiFetch<MeResponse>("/api/auth/me"),
       ]);
       setRewards(rewardData.rewards);
       setTasks(taskData.tasks.filter((t) => t.status === "active"));
       setStreaks(streakData.streaks);
+      setMembers(roomData.members);
+      setMyId(me.member?.id ?? null);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "載入失敗");
     }
   }
+
+  const colorByMemberId = new Map(members.map((m) => [m.id, m.color]));
 
   async function redeemVoucher(rewardId: number) {
     const today = new Intl.DateTimeFormat("en-CA").format(new Date());
@@ -83,14 +93,21 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
         <section className="rounded-xl border border-slate-200 bg-white p-4">
           <h2 className="mb-2 text-sm font-semibold text-slate-600">連續天數</h2>
           <div className="flex gap-6 text-sm">
-            {streaks.map((s) => (
-              <div key={s.roomMemberId}>
-                <div className="font-medium">{s.displayNickname}</div>
-                <div className="text-slate-500">
-                  目前 {s.currentStreak} 天 · 最長 {s.longestStreak} 天
+            {streaks.map((s) => {
+              const color = colorByMemberId.get(s.roomMemberId) ?? "#94a3b8";
+              return (
+                <div key={s.roomMemberId} className="border-l-2 pl-2" style={{ borderLeftColor: color }}>
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                    {s.displayNickname}
+                    {s.roomMemberId === myId && <span className="text-xs font-normal text-slate-400">（你）</span>}
+                  </div>
+                  <div className="text-slate-500">
+                    目前 {s.currentStreak} 天 · 最長 {s.longestStreak} 天
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
@@ -107,33 +124,46 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
       )}
 
       <ul className="space-y-3">
-        {rewards.map((r) => (
-          <li key={r.id} className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="font-medium">{r.title}</span>
-                <span className="ml-2 text-xs text-slate-400">
-                  {TYPE_LABEL[r.type] ?? r.type}
-                  {r.stockTotal !== null && ` · 庫存 ${r.stockRemaining}/${r.stockTotal}`}
-                </span>
+        {rewards.map((r) => {
+          const creatorColor = colorByMemberId.get(r.createdById);
+          return (
+            <li
+              key={r.id}
+              className="rounded-xl border border-slate-200 bg-white p-4 border-l-4"
+              style={{ borderLeftColor: creatorColor ?? "#e2e8f0" }}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-medium">{r.title}</span>
+                  <span className="ml-2 text-xs text-slate-400">
+                    {TYPE_LABEL[r.type] ?? r.type}
+                    {r.stockTotal !== null && ` · 庫存 ${r.stockRemaining}/${r.stockTotal}`}
+                  </span>
+                </div>
+                {r.type === "rescue_voucher" ? (
+                  r.unlocked ? (
+                    <button
+                      onClick={() => redeemVoucher(r.id)}
+                      disabled={r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0}
+                      className="rounded-lg bg-amber-600 px-3 py-1 text-xs text-white disabled:opacity-40"
+                    >
+                      使用補救券
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400" title="只有達成解鎖條件的本人才能使用">
+                      🔒 尚未解鎖
+                    </span>
+                  )
+                ) : (
+                  <span className={`text-xs ${r.unlocked ? "text-emerald-600" : "text-slate-400"}`}>
+                    {r.unlocked ? "已解鎖" : "🔒 未解鎖"}
+                  </span>
+                )}
               </div>
-              {r.type === "rescue_voucher" ? (
-                <button
-                  onClick={() => redeemVoucher(r.id)}
-                  disabled={r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0}
-                  className="rounded-lg bg-amber-600 px-3 py-1 text-xs text-white disabled:opacity-40"
-                >
-                  使用補救券
-                </button>
-              ) : (
-                <span className={`text-xs ${r.unlocked ? "text-emerald-600" : "text-slate-400"}`}>
-                  {r.unlocked ? "已解鎖" : "🔒 未解鎖"}
-                </span>
-              )}
-            </div>
-            {r.unlocked && r.contentText && <p className="mt-2 text-sm text-slate-600">{r.contentText}</p>}
-          </li>
-        ))}
+              {r.unlocked && r.contentText && <p className="mt-2 text-sm text-slate-600">{r.contentText}</p>}
+            </li>
+          );
+        })}
         {rewards.length === 0 && <p className="text-sm text-slate-400">目前沒有獎勵</p>}
       </ul>
     </div>

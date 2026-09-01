@@ -241,10 +241,18 @@ export default function DraftReviewPage({ params }: { params: Promise<{ id: stri
           </section>
 
           <div>
-            <label className="mb-1 block text-sm text-slate-600">說明你修改了什麼</label>
+            <label className="mb-1 block text-sm text-slate-600">
+              說明你修改了什麼 <span className="text-red-500">*必填</span>
+            </label>
+            <p className="mb-1 text-xs text-slate-400">
+              送回前必須留言，讓對方知道要重新檢視哪裡改了；沒有這段說明無法送出。
+            </p>
             <textarea
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className={`w-full rounded-lg border px-3 py-2 ${
+                comment.trim() ? "border-slate-300" : "border-amber-300 bg-amber-50/50"
+              }`}
               rows={2}
+              placeholder="例如：把「倒垃圾」的點數從 5 點改成 10 點"
               value={comment}
               onChange={(e) => setComment(e.target.value)}
             />
@@ -259,7 +267,8 @@ export default function DraftReviewPage({ params }: { params: Promise<{ id: stri
             </button>
             <button
               onClick={submitRevise}
-              className="flex-1 rounded-xl bg-amber-600 py-3 font-medium text-white"
+              disabled={!comment.trim()}
+              className="flex-1 rounded-xl bg-amber-600 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               送回給對方
             </button>

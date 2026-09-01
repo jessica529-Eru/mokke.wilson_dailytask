@@ -22,13 +22,32 @@ export default async function RoomLayout({
     redirect("/login");
   }
 
+  const me = await db.roomMember.findUnique({ where: { id: session.roomMemberId } });
+
   const isDraft = room.status === "draft";
 
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <span className="font-semibold">{room.roomName}</span>
+          <div className="flex items-center gap-3">
+            <span className="font-semibold">{room.roomName}</span>
+            {me && (
+              <span
+                className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium"
+                style={{ borderColor: me.color, color: me.color, backgroundColor: `${me.color}1a` }}
+                title="這是你目前登入的身分"
+              >
+                {me.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={me.avatarUrl} alt="" className="h-4 w-4 rounded-full object-cover" />
+                ) : (
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: me.color }} />
+                )}
+                你是 {me.displayNickname}
+              </span>
+            )}
+          </div>
           {!isDraft && (
             <nav className="flex gap-4 text-sm text-slate-600">
               <Link href={`/rooms/${roomId}`} className="hover:text-slate-900">

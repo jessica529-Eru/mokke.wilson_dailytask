@@ -10,9 +10,11 @@ const bodySchema = z.object({
   makeupForDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
-// Section 10.10: a rescue voucher patches a missed daily-streak day. Usage
-// is capped only by the voucher's stock (not a per-use unlock check) and
-// the makeup date must fall within the last 14 days.
+// Section 10.10: a rescue voucher patches a missed daily-streak day. It
+// must only be usable by whoever personally met its unlock condition (a
+// RewardUnlock row scoped to this member) — not a shared pool anyone in
+// the room can spend from — then usage is capped by the voucher's stock
+// and the makeup date must fall within the last 14 days.
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/rescue-vouchers/use">) {
   try {
     const { id } = await ctx.params;
@@ -27,6 +29,12 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
     }
     if (reward.type !== "rescue_voucher") {
       throw new ApiError(400, "這不是補救券");
+    }
+    const unlock = await db.rewardUnlock.findUnique({
+      where: { rewardId_roomMemberId: { rewardId: reward.id, roomMemberId: member.id } },
+    });
+    if (!unlock) {
+      throw new ApiError(403, "尚未解鎖這張補救券，只有達成條件的本人才能使用");
     }
     if (reward.stockTotal !== null && (reward.stockRemaining ?? 0) <= 0) {
       throw new ApiError(409, "補救券庫存不足");

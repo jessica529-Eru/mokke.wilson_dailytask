@@ -15,13 +15,39 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "已封存",
 };
 
-const ASSIGN_SCOPE_LABEL: Record<AssignScope, string> = {
-  self: "自己",
-  partner: "對方",
-  both: "雙方各自",
+const TYPE_LABEL: Record<TaskType, string> = {
+  daily: "日常任務",
+  extra_normal: "單次額外任務",
+  extra_quota: "額度任務",
 };
 
+const TYPE_ORDER: TaskType[] = ["daily", "extra_normal", "extra_quota"];
+
 type MeResponse = { member: { id: number } | null };
+
+// The stored assignScope (self/partner/both) is anchored to the creator's
+// perspective from when the task was proposed (see roomDraft.ts), so it
+// must never be shown as-is — "self" would read as "自己" to the partner
+// too. This resolves it relative to whoever is currently looking at the
+// page, and returns the color(s) to paint alongside it (#7/#8 feedback:
+// the two members need a visible, consistent color distinction).
+function resolveScopeDisplay(
+  task: TaskTemplateDTO,
+  myId: number | null,
+  members: MemberDTO[]
+): { label: string; colors: string[] } {
+  if (task.assignScope === "both") {
+    return { label: "雙方各自", colors: members.map((m) => m.color) };
+  }
+  const assignedMember = task.assignedToId ? members.find((m) => m.id === task.assignedToId) : undefined;
+  if (task.assignedToId !== null && task.assignedToId === myId) {
+    return { label: "自己", colors: assignedMember ? [assignedMember.color] : [] };
+  }
+  return {
+    label: assignedMember ? `對方（${assignedMember.displayNickname}）` : "對方",
+    colors: assignedMember ? [assignedMember.color] : [],
+  };
+}
 
 export default function TasksPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
@@ -57,7 +83,8 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
-  const nicknameById = new Map(members.map((m) => [m.id, m.displayNickname]));
+  const tasksByType: Record<TaskType, TaskTemplateDTO[]> = { daily: [], extra_normal: [], extra_quota: [] };
+  for (const t of tasks) tasksByType[t.type].push(t);
 
   return (
     <div className="space-y-6">
@@ -84,20 +111,63 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
         />
       )}
 
-      <ul className="space-y-3">
-        {tasks.map((t) => (
-          <TaskRow
-            key={t.id}
-            task={t}
-            roomId={roomId}
-            myId={myId}
-            assignedNickname={t.assignedToId ? nicknameById.get(t.assignedToId) : undefined}
-            onChanged={load}
-          />
-        ))}
-        {tasks.length === 0 && <p className="text-sm text-slate-400">目前沒有任務</p>}
-      </ul>
+      {tasks.length === 0 && <p className="text-sm text-slate-400">目前沒有任務</p>}
+
+      {TYPE_ORDER.map((type) => (
+        <TaskSection
+          key={type}
+          type={type}
+          tasks={tasksByType[type]}
+          roomId={roomId}
+          myId={myId}
+          members={members}
+          onChanged={load}
+        />
+      ))}
     </div>
+  );
+}
+
+function TaskSection({
+  type,
+  tasks,
+  roomId,
+  myId,
+  members,
+  onChanged,
+}: {
+  type: TaskType;
+  tasks: TaskTemplateDTO[];
+  roomId: number;
+  myId: number | null;
+  members: MemberDTO[];
+  onChanged: () => void;
+}) {
+  // Collapsed by default once a section gets long — the point of folding
+  // is to keep a busy list scannable, not to hide a short one.
+  const [open, setOpen] = useState(tasks.length <= 5);
+
+  if (tasks.length === 0) return null;
+
+  return (
+    <section>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-lg bg-slate-100 px-3 py-2 text-left text-sm font-semibold text-slate-700"
+      >
+        <span>
+          {TYPE_LABEL[type]} <span className="font-normal text-slate-400">（{tasks.length}）</span>
+        </span>
+        <span className="text-slate-400">{open ? "收合 ▲" : "展開 ▼"}</span>
+      </button>
+      {open && (
+        <ul className="mt-3 space-y-3">
+          {tasks.map((t) => (
+            <TaskRow key={t.id} task={t} roomId={roomId} myId={myId} members={members} onChanged={onChanged} />
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -213,13 +283,13 @@ function TaskRow({
   task,
   roomId,
   myId,
-  assignedNickname,
+  members,
   onChanged,
 }: {
   task: TaskTemplateDTO;
   roomId: number;
   myId: number | null;
-  assignedNickname?: string;
+  members: MemberDTO[];
   onChanged: () => void;
 }) {
   const [completing, setCompleting] = useState(false);
@@ -230,6 +300,9 @@ function TaskRow({
 
   const canComplete =
     task.status === "active" && (task.assignScope === "both" || task.assignedToId === myId);
+
+  const scope = resolveScopeDisplay(task, myId, members);
+  const borderColor = scope.colors[0] ?? "#cbd5e1";
 
   async function complete() {
     setError(null);
@@ -281,7 +354,10 @@ function TaskRow({
   }
 
   return (
-    <li className="rounded-xl border border-slate-200 bg-white p-4">
+    <li
+      className="rounded-xl border border-slate-200 bg-white p-4 border-l-4"
+      style={{ borderLeftColor: borderColor }}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           {task.stampIcon && (
@@ -291,9 +367,14 @@ function TaskRow({
           )}
           <div>
             <div className="font-medium">{task.title}</div>
-            <div className="text-xs text-slate-400">
-              {task.points ?? 0} 點 · {ASSIGN_SCOPE_LABEL[task.assignScope]}
-              {assignedNickname ? `（${assignedNickname}）` : ""}
+            <div className="flex items-center gap-1 text-xs text-slate-400">
+              {task.points ?? 0} 點 ·
+              <span className="inline-flex items-center gap-1">
+                {scope.colors.map((c, i) => (
+                  <span key={i} className="h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
+                ))}
+                {scope.label}
+              </span>
               {task.type === "extra_quota" && ` · 額度 ${task.quotaUsed}/${task.quotaTotal}`}
               {task.isSystemGenerated && " · 🎁 驚喜任務"}
             </div>

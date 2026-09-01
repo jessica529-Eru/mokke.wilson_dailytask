@@ -51,10 +51,17 @@ export async function saveUploadedImage(file: File): Promise<{ url: string }> {
   // fallback is correct here since this is a full (non-standalone) build.
   // The ignore comment must sit inside the call whose argument is dynamic,
   // not in front of the whole expression, or Turbopack doesn't pick it up.
-  await mkdir(/* turbopackIgnore: true */ UPLOAD_DIR, { recursive: true });
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(path.join(/* turbopackIgnore: true */ UPLOAD_DIR, filename), buffer);
+  try {
+    await mkdir(/* turbopackIgnore: true */ UPLOAD_DIR, { recursive: true });
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await writeFile(path.join(/* turbopackIgnore: true */ UPLOAD_DIR, filename), buffer);
+  } catch (err) {
+    // Surface the real fs error (path + code) in server logs — a bare
+    // "Internal server error" gives no way to tell a missing/unwritable
+    // UPLOAD_DIR apart from any other failure when reading Railway logs.
+    console.error(`[uploads] failed writing to UPLOAD_DIR=${UPLOAD_DIR}:`, err);
+    throw new UploadError("儲存圖片失敗，請稍後再試");
+  }
 
   return { url: `/uploads/${filename}` };
 }
