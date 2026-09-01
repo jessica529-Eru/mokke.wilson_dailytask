@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
+import { MultiImageUploadField } from "@/components/MultiImageUploadField";
 import type { MemberDTO, RewardDTO, TaskTemplateDTO } from "@/lib/types";
 
 type StreakDTO = {
@@ -161,6 +162,14 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
                 )}
               </div>
               {r.unlocked && r.contentText && <p className="mt-2 text-sm text-slate-600">{r.contentText}</p>}
+              {r.unlocked && r.contentImageUrls && r.contentImageUrls.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  {r.contentImageUrls.map((url, i) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={i} src={url} alt="" className="w-full rounded-lg object-contain" />
+                  ))}
+                </div>
+              )}
             </li>
           );
         })}
@@ -182,6 +191,7 @@ function NewRewardForm({
   const [type, setType] = useState<"fixed_item" | "rescue_voucher" | "other">("fixed_item");
   const [title, setTitle] = useState("");
   const [contentText, setContentText] = useState("");
+  const [contentImageUrls, setContentImageUrls] = useState<string[]>([]);
   const [stockTotal, setStockTotal] = useState<number | "">("");
   const [conditionType, setConditionType] = useState<"none" | "single_task" | "multi_task_threshold" | "streak_days">(
     "none"
@@ -215,6 +225,7 @@ function NewRewardForm({
           type,
           title,
           contentText: contentText || undefined,
+          contentImageUrls: contentImageUrls.length > 0 ? contentImageUrls : undefined,
           stockTotal: stockTotal === "" ? undefined : stockTotal,
           assignment,
         }),
@@ -241,6 +252,10 @@ function NewRewardForm({
         value={contentText}
         onChange={(e) => setContentText(e.target.value)}
       />
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">附上照片（選填，解鎖後才看得到）</label>
+        <MultiImageUploadField value={contentImageUrls} onChange={setContentImageUrls} />
+      </div>
       <div className="flex flex-wrap gap-4 text-sm">
         <label className="flex items-center gap-2">
           類型

@@ -153,12 +153,7 @@ export default function CalendarPage({ params }: { params: Promise<{ id: string 
         <StampDetailModal
           stamp={selectedDay.producedStamp}
           isOwner={viewMemberId === myId}
-          roomId={roomId}
           onClose={() => setSelectedDay(null)}
-          onShared={() => {
-            loadCalendar();
-            setSelectedDay(null);
-          }}
         />
       )}
     </div>
@@ -168,34 +163,12 @@ export default function CalendarPage({ params }: { params: Promise<{ id: string 
 function StampDetailModal({
   stamp,
   isOwner,
-  roomId,
   onClose,
-  onShared,
 }: {
   stamp: NonNullable<CalendarDayDTO["producedStamp"]>;
   isOwner: boolean;
-  roomId: number;
   onClose: () => void;
-  onShared: () => void;
 }) {
-  const [sharing, setSharing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function share() {
-    setSharing(true);
-    setError(null);
-    try {
-      await apiFetch(`/api/rooms/${roomId}/rewards/share`, {
-        method: "POST",
-        body: JSON.stringify({ rewardId: stamp.rewardId }),
-      });
-      onShared();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "分享失敗");
-      setSharing(false);
-    }
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
@@ -210,7 +183,7 @@ function StampDetailModal({
         </div>
 
         {!stamp.unlocked ? (
-          <p className="text-sm text-slate-500">🔒 對方尚未把這則成果分享給你。</p>
+          <p className="text-sm text-slate-500">🔒 你還沒達成解鎖條件，完成對方指定的任務後就能看到內容。</p>
         ) : (
           <div className="space-y-3">
             {stamp.contentText && <p className="whitespace-pre-wrap text-sm text-slate-700">{stamp.contentText}</p>}
@@ -231,21 +204,11 @@ function StampDetailModal({
           </div>
         )}
 
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-
         {isOwner && stamp.unlocked && (
-          <div className="mt-4 border-t border-slate-100 pt-3">
-            {stamp.sharedWithPartner ? (
-              <p className="text-xs text-emerald-600">✓ 已分享給對方查看</p>
-            ) : (
-              <button
-                onClick={share}
-                disabled={sharing}
-                className="w-full rounded-lg bg-slate-900 py-2 text-sm text-white disabled:opacity-50"
-              >
-                {sharing ? "分享中…" : "分享給對方查看"}
-              </button>
-            )}
+          <div className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+            {stamp.hasUnlockCondition
+              ? "對方需要達成你設定的解鎖條件才能看到這則內容。"
+              : "沒有設定解鎖條件，對方永遠看不到這則內容。"}
           </div>
         )}
       </div>

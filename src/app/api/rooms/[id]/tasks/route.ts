@@ -69,6 +69,14 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
     const assignedToId = body.assignScope === "self" ? member.id : body.assignScope === "partner" ? partner.id : null;
     const needsApproval = body.assignScope !== "self";
 
+    let boundReward = null;
+    if (body.bindRewardId) {
+      boundReward = await db.reward.findUnique({ where: { id: body.bindRewardId } });
+      if (!boundReward || boundReward.roomId !== roomId || boundReward.type === "produced_content") {
+        throw new ApiError(404, "找不到要綁定的獎勵");
+      }
+    }
+
     const result = await db.$transaction(async (tx) => {
       const task = await tx.taskTemplate.create({
         data: {
@@ -101,6 +109,17 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
             payload: JSON.stringify(body),
             status: "pending",
             responseDeadline: computeResponseDeadline(room.defaultReviewDays, body.approvalDeadline),
+          },
+        });
+      }
+
+      if (boundReward) {
+        await tx.rewardAssignment.create({
+          data: {
+            rewardId: boundReward.id,
+            taskTemplateId: task.id,
+            unlockConditionType: "single_task",
+            unlockConditionValue: JSON.stringify({ taskId: task.id }),
           },
         });
       }

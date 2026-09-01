@@ -88,7 +88,6 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
         stampReward = await createProducedStamp(tx, {
           roomId,
           roomMemberId: member.id,
-          partnerId: partner?.id,
           taskTitle: task.title,
           proofText: body.proofText,
           proofImageUrls: body.proofImageUrls,
@@ -97,6 +96,15 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
           where: { id: completion.id },
           data: { rewardId: stampReward.id },
         });
+        if (body.unlockCondition) {
+          await tx.rewardAssignment.create({
+            data: {
+              rewardId: stampReward.id,
+              unlockConditionType: body.unlockCondition.unlockConditionType,
+              unlockConditionValue: JSON.stringify(body.unlockCondition.unlockConditionValue),
+            },
+          });
+        }
       }
 
       if (task.type === "daily" && task.streakCountsTowardDaily) {
@@ -124,16 +132,6 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
 
     if (unlockedRewardIds.length > 0) {
       await notifyRewardUnlocks(roomId, member.id, unlockedRewardIds);
-    }
-
-    if (partner && stampReward) {
-      await notify({
-        roomId,
-        roomMemberId: partner.id,
-        type: "reward_unlocked",
-        relatedEntityType: "Calendar",
-        relatedEntityId: stampReward.id,
-      });
     }
 
     if (partner && surpriseTask) {

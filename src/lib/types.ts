@@ -119,7 +119,7 @@ export type CalendarDayDTO = {
     unlocked: boolean;
     contentText: string | null;
     contentImageUrls: string[] | null;
-    sharedWithPartner?: boolean;
+    hasUnlockCondition?: boolean;
   } | null;
 };
 

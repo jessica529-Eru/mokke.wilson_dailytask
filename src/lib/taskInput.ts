@@ -15,6 +15,10 @@ export const createTaskSchema = z
     triggerProbability: z.number().min(0).max(1).optional(),
     triggerTargetType: z.enum(["specific_task", "random_from_existing"]).optional(),
     triggerTargetTaskId: z.number().int().optional(),
+    // Lets the creator bind an existing reward right here instead of having
+    // to separately go set it up in the reward library afterward — creates
+    // a single_task RewardAssignment (complete this task once → unlock).
+    bindRewardId: z.number().int().optional(),
   })
   .refine((v) => v.type !== "extra_quota" || typeof v.quotaTotal === "number", {
     message: "額度任務需設定 quotaTotal",
@@ -43,4 +47,16 @@ export const completeTaskSchema = z.object({
   completedLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   isMakeup: z.boolean().default(false),
   makeupForDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Section 10.9: the produced_content "stamp" from a proof completion is
+  // private to its producer by default (RewardUnlock is only ever created
+  // for them). The partner only ever sees it by earning it — completing
+  // whatever condition the producer sets here at the moment of upload, the
+  // same single_task/multi_task_threshold/streak_days vocabulary as any
+  // other RewardAssignment. Omitted = the partner never sees it.
+  unlockCondition: z
+    .object({
+      unlockConditionType: z.enum(["single_task", "multi_task_threshold", "streak_days"]),
+      unlockConditionValue: z.record(z.string(), z.unknown()),
+    })
+    .optional(),
 });

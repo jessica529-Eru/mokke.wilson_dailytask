@@ -56,20 +56,20 @@ export async function GET(req: Request, ctx: RouteContext<"/api/rooms/[id]/calen
     const isOwner = viewer.id === targetMemberId;
 
     // Only meaningful (and only computed) when the viewer is looking at
-    // their own calendar — it drives the "share with partner" action, so
-    // it needs to reflect whether the *partner* already has an unlock,
-    // not the viewer.
-    let partnerUnlockedRewardIds = new Set<number>();
+    // their own calendar — lets the UI tell them whether they've set an
+    // unlock condition on a given stamp yet, without exposing that to the
+    // partner (who shouldn't see it's gated, only whether they've met it).
+    let rewardIdsWithCondition = new Set<number>();
     if (isOwner) {
       const rewardIds = completions.filter((c) => c.reward).map((c) => c.reward!.id);
       if (rewardIds.length > 0) {
-        partnerUnlockedRewardIds = new Set(
+        rewardIdsWithCondition = new Set(
           (
-            await db.rewardUnlock.findMany({
-              where: { rewardId: { in: rewardIds }, roomMemberId: { not: viewer.id } },
+            await db.rewardAssignment.findMany({
+              where: { rewardId: { in: rewardIds } },
               select: { rewardId: true },
             })
-          ).map((u) => u.rewardId)
+          ).map((a) => a.rewardId)
         );
       }
     }
@@ -85,7 +85,7 @@ export async function GET(req: Request, ctx: RouteContext<"/api/rooms/[id]/calen
           unlocked: boolean;
           contentText: string | null;
           contentImageUrls: string[] | null;
-          sharedWithPartner?: boolean;
+          hasUnlockCondition?: boolean;
         } | null;
       }
     >();
@@ -105,7 +105,7 @@ export async function GET(req: Request, ctx: RouteContext<"/api/rooms/[id]/calen
           unlocked,
           contentText: unlocked ? c.reward.contentText : null,
           contentImageUrls: unlocked && c.reward.contentImageUrls ? JSON.parse(c.reward.contentImageUrls) : null,
-          ...(isOwner ? { sharedWithPartner: partnerUnlockedRewardIds.has(c.reward.id) } : {}),
+          ...(isOwner ? { hasUnlockCondition: rewardIdsWithCondition.has(c.reward.id) } : {}),
         };
       } else {
         day.stamps.push({

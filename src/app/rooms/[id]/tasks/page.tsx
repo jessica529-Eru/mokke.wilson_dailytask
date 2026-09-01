@@ -5,7 +5,7 @@ import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { StampIconPicker } from "@/components/StampIconPicker";
 import { FrameStamp } from "@/components/FrameStamp";
 import { MultiImageUploadField } from "@/components/MultiImageUploadField";
-import type { AssignScope, IconAssetDTO, MemberDTO, TaskTemplateDTO, TaskType } from "@/lib/types";
+import type { AssignScope, IconAssetDTO, MemberDTO, RewardDTO, TaskTemplateDTO, TaskType } from "@/lib/types";
 
 const STATUS_LABEL: Record<string, string> = {
   active: "進行中",
@@ -57,21 +57,24 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
   const [members, setMembers] = useState<MemberDTO[]>([]);
   const [myId, setMyId] = useState<number | null>(null);
   const [icons, setIcons] = useState<IconAssetDTO[]>([]);
+  const [rewards, setRewards] = useState<RewardDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   async function load() {
     try {
-      const [taskData, roomData, me, iconData] = await Promise.all([
+      const [taskData, roomData, me, iconData, rewardData] = await Promise.all([
         apiFetch<{ tasks: TaskTemplateDTO[] }>(`/api/rooms/${roomId}/tasks`),
         apiFetch<{ members: MemberDTO[] }>(`/api/rooms/${roomId}`),
         apiFetch<MeResponse>("/api/auth/me"),
         apiFetch<{ assets: IconAssetDTO[] }>(`/api/rooms/${roomId}/icon-assets`),
+        apiFetch<{ rewards: RewardDTO[] }>(`/api/rooms/${roomId}/rewards`),
       ]);
       setTasks(taskData.tasks);
       setMembers(roomData.members);
       setMyId(me.member?.id ?? null);
       setIcons(iconData.assets);
+      setRewards(rewardData.rewards);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "載入失敗");
     }
@@ -104,6 +107,7 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
         <NewTaskForm
           roomId={roomId}
           icons={icons}
+          rewards={rewards}
           onCreated={() => {
             setShowForm(false);
             load();
@@ -118,6 +122,7 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
           key={type}
           type={type}
           tasks={tasksByType[type]}
+          allTasks={tasks}
           roomId={roomId}
           myId={myId}
           members={members}
@@ -131,6 +136,7 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
 function TaskSection({
   type,
   tasks,
+  allTasks,
   roomId,
   myId,
   members,
@@ -138,6 +144,7 @@ function TaskSection({
 }: {
   type: TaskType;
   tasks: TaskTemplateDTO[];
+  allTasks: TaskTemplateDTO[];
   roomId: number;
   myId: number | null;
   members: MemberDTO[];
@@ -163,7 +170,15 @@ function TaskSection({
       {open && (
         <ul className="mt-3 space-y-3">
           {tasks.map((t) => (
-            <TaskRow key={t.id} task={t} roomId={roomId} myId={myId} members={members} onChanged={onChanged} />
+            <TaskRow
+              key={t.id}
+              task={t}
+              roomId={roomId}
+              myId={myId}
+              members={members}
+              allTasks={allTasks}
+              onChanged={onChanged}
+            />
           ))}
         </ul>
       )}
@@ -174,10 +189,12 @@ function TaskSection({
 function NewTaskForm({
   roomId,
   icons,
+  rewards,
   onCreated,
 }: {
   roomId: number;
   icons: IconAssetDTO[];
+  rewards: RewardDTO[];
   onCreated: () => void;
 }) {
   const [type, setType] = useState<TaskType>("daily");
@@ -187,6 +204,7 @@ function NewTaskForm({
   const [requiresProof, setRequiresProof] = useState(false);
   const [quotaTotal, setQuotaTotal] = useState(1);
   const [stampIconAssetId, setStampIconAssetId] = useState<number | undefined>(undefined);
+  const [bindRewardId, setBindRewardId] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
@@ -203,6 +221,7 @@ function NewTaskForm({
           requiresProof,
           quotaTotal: type === "extra_quota" ? quotaTotal : undefined,
           stampIconAssetId,
+          bindRewardId: bindRewardId === "" ? undefined : bindRewardId,
         }),
       });
       onCreated();
@@ -268,6 +287,26 @@ function NewTaskForm({
         </label>
       </div>
       <StampIconPicker assets={icons} value={stampIconAssetId} onChange={setStampIconAssetId} />
+      {rewards.length > 0 && (
+        <label className="flex items-center gap-2 text-sm">
+          綁定獎勵庫（選填）
+          <select
+            className="rounded-lg border border-slate-300 px-2 py-1"
+            value={bindRewardId}
+            onChange={(e) => setBindRewardId(e.target.value === "" ? "" : Number(e.target.value))}
+          >
+            <option value="">不綁定</option>
+            {rewards.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.title}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {bindRewardId !== "" && (
+        <p className="text-xs text-slate-500">完成這項任務一次，即可解鎖所選的獎勵。</p>
+      )}
       {assignScope !== "self" && (
         <p className="text-xs text-amber-600">此任務需要對方同意才會生效。</p>
       )}
@@ -284,12 +323,14 @@ function TaskRow({
   roomId,
   myId,
   members,
+  allTasks,
   onChanged,
 }: {
   task: TaskTemplateDTO;
   roomId: number;
   myId: number | null;
   members: MemberDTO[];
+  allTasks: TaskTemplateDTO[];
   onChanged: () => void;
 }) {
   const [completing, setCompleting] = useState(false);
@@ -297,6 +338,14 @@ function TaskRow({
   const [proofImageUrls, setProofImageUrls] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [justStamped, setJustStamped] = useState(false);
+
+  const [conditionType, setConditionType] = useState<"none" | "single_task" | "multi_task_threshold" | "streak_days">(
+    "none"
+  );
+  const [singleTaskId, setSingleTaskId] = useState<number | "">("");
+  const [multiTaskIds, setMultiTaskIds] = useState<number[]>([]);
+  const [threshold, setThreshold] = useState(3);
+  const [streakDays, setStreakDays] = useState(7);
 
   const canComplete =
     task.status === "active" && (task.assignScope === "both" || task.assignedToId === myId);
@@ -306,6 +355,17 @@ function TaskRow({
 
   async function complete() {
     setError(null);
+    let unlockCondition: { unlockConditionType: string; unlockConditionValue: Record<string, unknown> } | undefined;
+    if (conditionType === "single_task" && singleTaskId !== "") {
+      unlockCondition = { unlockConditionType: "single_task", unlockConditionValue: { taskId: singleTaskId } };
+    } else if (conditionType === "multi_task_threshold" && multiTaskIds.length > 0) {
+      unlockCondition = {
+        unlockConditionType: "multi_task_threshold",
+        unlockConditionValue: { taskIds: multiTaskIds, threshold },
+      };
+    } else if (conditionType === "streak_days") {
+      unlockCondition = { unlockConditionType: "streak_days", unlockConditionValue: { days: streakDays } };
+    }
     try {
       const localDate = new Intl.DateTimeFormat("en-CA").format(new Date());
       await apiFetch(`/api/rooms/${roomId}/tasks/${task.id}/complete`, {
@@ -314,11 +374,13 @@ function TaskRow({
           completedLocalDate: localDate,
           proofText: proofText || undefined,
           proofImageUrls: proofImageUrls.length > 0 ? proofImageUrls : undefined,
+          unlockCondition,
         }),
       });
       setCompleting(false);
       setProofText("");
       setProofImageUrls([]);
+      setConditionType("none");
       setJustStamped(true);
       setTimeout(() => setJustStamped(false), 700);
       onChanged();
@@ -400,6 +462,79 @@ function TaskRow({
                     onChange={(e) => setProofText(e.target.value)}
                   />
                   <MultiImageUploadField value={proofImageUrls} onChange={setProofImageUrls} />
+
+                  <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
+                    <div className="font-medium text-slate-600">
+                      對方解鎖條件（選填，對方要達成才能看到這則郵票內容）
+                    </div>
+                    <select
+                      className="rounded-lg border border-slate-300 px-2 py-1"
+                      value={conditionType}
+                      onChange={(e) => setConditionType(e.target.value as typeof conditionType)}
+                    >
+                      <option value="none">不設定（對方永遠看不到）</option>
+                      <option value="single_task">完成指定任務一次</option>
+                      <option value="multi_task_threshold">完成多個任務達門檻次數</option>
+                      <option value="streak_days">連續天數達標</option>
+                    </select>
+
+                    {conditionType === "single_task" && (
+                      <select
+                        className="w-full rounded-lg border border-slate-300 px-2 py-1"
+                        value={singleTaskId}
+                        onChange={(e) => setSingleTaskId(Number(e.target.value))}
+                      >
+                        <option value="">選擇任務</option>
+                        {allTasks.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.title}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {conditionType === "multi_task_threshold" && (
+                      <div className="space-y-1">
+                        {allTasks.map((t) => (
+                          <label key={t.id} className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={multiTaskIds.includes(t.id)}
+                              onChange={(e) =>
+                                setMultiTaskIds((prev) =>
+                                  e.target.checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
+                                )
+                              }
+                            />
+                            {t.title}
+                          </label>
+                        ))}
+                        <label className="flex items-center gap-2">
+                          門檻次數
+                          <input
+                            type="number"
+                            min={1}
+                            className="w-20 rounded-lg border border-slate-300 px-2 py-1"
+                            value={threshold}
+                            onChange={(e) => setThreshold(Number(e.target.value))}
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {conditionType === "streak_days" && (
+                      <label className="flex items-center gap-2">
+                        連續天數
+                        <input
+                          type="number"
+                          min={1}
+                          className="w-20 rounded-lg border border-slate-300 px-2 py-1"
+                          value={streakDays}
+                          onChange={(e) => setStreakDays(Number(e.target.value))}
+                        />
+                      </label>
+                    )}
+                  </div>
                 </>
               )}
               <div className="flex gap-2">
