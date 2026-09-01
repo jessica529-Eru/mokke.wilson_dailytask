@@ -47,6 +47,7 @@ next-env.d.ts
 prisma/*.db
 prisma/*.db-journal
 
-# user-uploaded files (avatars, task proof photos)
-/public/uploads/*
-!/public/uploads/.gitkeep
+# user-uploaded files (avatars, task proof photos) — served via
+# src/app/uploads/[filename]/route.ts, NOT public/ static serving
+/uploads/*
+!/uploads/.gitkeep

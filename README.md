@@ -101,13 +101,22 @@ VAPID_SUBJECT="mailto:you@example.com"
 ### 圖片上傳
 
 - `POST /api/uploads`（multipart/form-data，欄位名 `file`）接受
-  JPEG/PNG/WebP/GIF、單檔上限 5MB，存到本機 `public/uploads/`（規格書
-  第 12 節允許的「本地/雲端儲存」兩個選項中，本地是這裡的預設，沒有配置
-  任何雲端憑證；要換成 S3 相容服務只需要改 `src/lib/uploads.ts` 這一個
-  函式）。回傳 `{ url: "/uploads/xxx.png" }`。
-- 這個端點刻意不需要登入：大頭貼上傳發生在「房間創建者/加入者都還沒有
-  session」的時間點，沒有成員可以驗證身份；驗證改為嚴格限制檔案類型/
-  大小，且整個 app 是邀請碼制、非公開註冊，可接受這個取捨。
+  JPEG/PNG/WebP/GIF、單檔上限 5MB，存到本機磁碟（規格書第 12 節允許的
+  「本地/雲端儲存」兩個選項中，本地是這裡的預設，沒有配置任何雲端憑證；
+  要換成 S3 相容服務只需要改 `src/lib/uploads.ts` 這一個函式）。回傳
+  `{ url: "/uploads/xxx.png" }`。
+- 存放位置由 `UPLOAD_DIR` 環境變數決定，預設是專案根目錄的 `uploads/`
+  資料夾（本機開發用，`.gitignore` 排除實際檔案）；正式環境會指到掛載
+  的持久化磁碟（見 `docs/deploy-railway.md`）。
+- **檔案不是放在 `public/` 底下、也不是靠 Next 內建的靜態檔案服務**：
+  實測發現 `next start`（正式環境模式）只在伺服器啟動當下讀取一次
+  `public/` 目錄，之後才新增的檔案會 404，除非重啟伺服器——這對「使用者
+  上傳完馬上要看到圖」的場景是直接壞掉的。改用一個真正的動態 Route
+  Handler（`src/app/uploads/[filename]/route.ts`）在請求當下即時讀取磁碟
+  並回傳，兩種環境行為一致，且做了檔名格式白名單擋路徑穿越攻擊。
+- 這個上傳端點刻意不需要登入：大頭貼上傳發生在「房間創建者/加入者都還
+  沒有 session」的時間點，沒有成員可以驗證身份；驗證改為嚴格限制檔案
+  類型/大小，且整個 app 是邀請碼制、非公開註冊，可接受這個取捨。
 - 前端：`ImageUploadField`（單張，大頭貼，`/new-room`、`/join` 都有接上）、
   `MultiImageUploadField`（最多 4 張，任務完成時的證明照片，`/rooms/[id]
   /tasks` 完成表單接上）。兩者都會先呼叫上傳端點拿到 URL，再把 URL 一起
@@ -118,10 +127,19 @@ VAPID_SUBJECT="mailto:you@example.com"
   `src/lib/zodHelpers.ts` 的 `imageUrlSchema`（同時接受絕對網址與同源相對
   路徑）。
 
+## 部署
+
+`docs/deploy-railway.md` 有完整的 Railway 部署步驟（含持久化 volume 設定、
+環境變數清單），照著點幾下網頁介面就能上線，不需要額外寫程式。
+
 ## 專案結構
 
 - `prisma/schema.prisma` — 完整資料模型
 - `src/app/api/**` — Route Handlers（REST-ish API）
 - `src/app/(pages)` — 房間建立、加入、登入、房間內首頁/任務/審核頁面
+- `src/app/uploads/[filename]/route.ts` — 上傳圖片的動態伺服端點（見上方
+  「圖片上傳」小節，不是 `public/` 靜態檔案）
 - `src/lib/**` — session、密碼雜湊、房間草稿解析、任務生命週期等共用邏輯
 - `public/icons/**` — 系統預設印章圖示庫（SVG 佔位美術）
+- `Dockerfile` / `docker/entrypoint.sh` — 部署用容器設定（見
+  `docs/deploy-railway.md`）

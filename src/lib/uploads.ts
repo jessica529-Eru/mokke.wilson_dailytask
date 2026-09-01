@@ -13,12 +13,28 @@ export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
 
 export class UploadError extends Error {}
 
+// Deliberately NOT under public/: Next's production server (`next start`)
+// resolves public/ static assets once at boot and does not re-scan the
+// directory per request, so a file written after the server started 404s
+// until the next restart (confirmed by testing — a plain file dropped into
+// public/ mid-run 404s even though it's on disk). Storing outside public/
+// and serving through src/app/uploads/[filename]/route.ts (a normal
+// dynamic route handler, always live) sidesteps that entirely, in both
+// dev and prod. UPLOAD_DIR lets a production deployment point this at a
+// persistent volume (see docs/deploy-railway.md); defaults to a top-level
+// `uploads/` folder for local dev.
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
+
+export function resolveUploadDir() {
+  return UPLOAD_DIR;
+}
+
 /**
- * Local filesystem storage under public/uploads — section 12 names this as
- * an acceptable option ("本地/雲端儲存") alongside S3-compatible services.
- * This app has no cloud storage credentials configured, so local disk is
- * the pragmatic default; swapping in an S3-compatible client later only
- * means changing this one function.
+ * Local filesystem storage — section 12 names this as an acceptable option
+ * ("本地/雲端儲存") alongside S3-compatible services. This app has no cloud
+ * storage credentials configured, so local disk is the pragmatic default;
+ * swapping in an S3-compatible client later only means changing this one
+ * function (and the GET route that serves uploads/[filename]).
  */
 export async function saveUploadedImage(file: File): Promise<{ url: string }> {
   const extension = ALLOWED_MIME_TYPES[file.type];
@@ -30,11 +46,13 @@ export async function saveUploadedImage(file: File): Promise<{ url: string }> {
   }
 
   const filename = `${nanoid(16)}.${extension}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadDir, { recursive: true });
+  // UPLOAD_DIR's value depends on an env var, so Turbopack can't statically
+  // scope this filesystem access — ignoring its trace-the-whole-project
+  // fallback is correct here since this is a full (non-standalone) build.
+  await mkdir(/* turbopackIgnore: true */ UPLOAD_DIR, { recursive: true });
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(path.join(uploadDir, filename), buffer);
+  await writeFile(/* turbopackIgnore: true */ path.join(UPLOAD_DIR, filename), buffer);
 
   return { url: `/uploads/${filename}` };
 }
