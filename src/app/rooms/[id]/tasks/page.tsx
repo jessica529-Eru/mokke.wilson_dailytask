@@ -6,6 +6,8 @@ import { StampIconPicker } from "@/components/StampIconPicker";
 import { FrameStamp } from "@/components/FrameStamp";
 import { MultiImageUploadField } from "@/components/MultiImageUploadField";
 import { ConditionPicker, type UnlockCondition } from "@/components/ConditionPicker";
+import { RewardSelect } from "@/components/RewardSelect";
+import { useMyId } from "@/lib/useMyId";
 import type { AssignScope, IconAssetDTO, MemberDTO, RewardDTO, TaskTemplateDTO, TaskType } from "@/lib/types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -28,8 +30,6 @@ const SECTION_ORDER: SectionKey[] = ["daily", "extra"];
 function sectionKeyFor(type: TaskType): SectionKey {
   return type === "daily" ? "daily" : "extra";
 }
-
-type MeResponse = { member: { id: number } | null };
 
 // The stored assignScope (self/partner/both) is anchored to the creator's
 // perspective from when the task was proposed (see roomDraft.ts), so it
@@ -67,7 +67,7 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
 
   const [tasks, setTasks] = useState<TaskTemplateDTO[]>([]);
   const [members, setMembers] = useState<MemberDTO[]>([]);
-  const [myId, setMyId] = useState<number | null>(null);
+  const myId = useMyId();
   const [icons, setIcons] = useState<IconAssetDTO[]>([]);
   const [rewards, setRewards] = useState<RewardDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -77,16 +77,14 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
 
   async function load() {
     try {
-      const [taskData, roomData, me, iconData, rewardData] = await Promise.all([
+      const [taskData, roomData, iconData, rewardData] = await Promise.all([
         apiFetch<{ tasks: TaskTemplateDTO[] }>(`/api/rooms/${roomId}/tasks`),
         apiFetch<{ members: MemberDTO[] }>(`/api/rooms/${roomId}`),
-        apiFetch<MeResponse>("/api/auth/me"),
         apiFetch<{ assets: IconAssetDTO[] }>(`/api/rooms/${roomId}/icon-assets`),
         apiFetch<{ rewards: RewardDTO[] }>(`/api/rooms/${roomId}/rewards`),
       ]);
       setTasks(taskData.tasks);
       setMembers(roomData.members);
-      setMyId(me.member?.id ?? null);
       setIcons(iconData.assets);
       setRewards(rewardData.rewards);
     } catch (err) {
@@ -355,18 +353,7 @@ function NewTaskForm({
       {rewards.length > 0 && (
         <label className="flex items-center gap-2 text-sm">
           綁定獎勵庫（選填）
-          <select
-            className="rounded-lg border border-slate-300 px-2 py-1"
-            value={bindRewardId}
-            onChange={(e) => setBindRewardId(e.target.value === "" ? "" : Number(e.target.value))}
-          >
-            <option value="">不綁定</option>
-            {rewards.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.title}
-              </option>
-            ))}
-          </select>
+          <RewardSelect rewards={rewards} value={bindRewardId} onChange={setBindRewardId} noneLabel="不綁定" />
         </label>
       )}
       {bindRewardId !== "" && (
@@ -563,18 +550,7 @@ function TaskRow({
               {rewards.length > 0 && (
                 <label className="flex items-center gap-2 text-sm text-slate-600">
                   同時解鎖獎勵（選填）
-                  <select
-                    className="rounded-lg border border-slate-300 px-2 py-1"
-                    value={nextQuotaRewardId}
-                    onChange={(e) => setNextQuotaRewardId(e.target.value === "" ? "" : Number(e.target.value))}
-                  >
-                    <option value="">不指定</option>
-                    {rewards.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.title}
-                      </option>
-                    ))}
-                  </select>
+                  <RewardSelect rewards={rewards} value={nextQuotaRewardId} onChange={setNextQuotaRewardId} />
                 </label>
               )}
               <p className="text-xs text-slate-400">此變更僅套用於下一次完成，需要對方同意才會生效。</p>

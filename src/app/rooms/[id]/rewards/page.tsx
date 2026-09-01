@@ -4,6 +4,7 @@ import { useEffect, useState, use as usePromise } from "react";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { MultiImageUploadField } from "@/components/MultiImageUploadField";
 import { ConditionPicker, type UnlockCondition } from "@/components/ConditionPicker";
+import { useMyId } from "@/lib/useMyId";
 import type { MemberDTO, RewardDTO, TaskTemplateDTO } from "@/lib/types";
 
 type StreakDTO = {
@@ -14,8 +15,6 @@ type StreakDTO = {
   longestStreak: number;
   lastActiveLocalDate: string | null;
 };
-
-type MeResponse = { member: { id: number } | null };
 
 const TYPE_LABEL: Record<string, string> = {
   fixed_item: "固定獎品",
@@ -31,7 +30,7 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
   const [tasks, setTasks] = useState<TaskTemplateDTO[]>([]);
   const [streaks, setStreaks] = useState<StreakDTO[]>([]);
   const [members, setMembers] = useState<MemberDTO[]>([]);
-  const [myId, setMyId] = useState<number | null>(null);
+  const myId = useMyId();
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [redeemingRewardId, setRedeemingRewardId] = useState<number | null>(null);
@@ -39,18 +38,16 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
 
   async function load() {
     try {
-      const [rewardData, taskData, streakData, roomData, me] = await Promise.all([
+      const [rewardData, taskData, streakData, roomData] = await Promise.all([
         apiFetch<{ rewards: RewardDTO[] }>(`/api/rooms/${roomId}/rewards`),
         apiFetch<{ tasks: TaskTemplateDTO[] }>(`/api/rooms/${roomId}/tasks`),
         apiFetch<{ streaks: StreakDTO[] }>(`/api/rooms/${roomId}/streaks`),
         apiFetch<{ members: MemberDTO[] }>(`/api/rooms/${roomId}`),
-        apiFetch<MeResponse>("/api/auth/me"),
       ]);
       setRewards(rewardData.rewards);
       setTasks(taskData.tasks.filter((t) => t.status === "active"));
       setStreaks(streakData.streaks);
       setMembers(roomData.members);
-      setMyId(me.member?.id ?? null);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "載入失敗");
     }

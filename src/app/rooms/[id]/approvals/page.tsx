@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
+import { useMyId } from "@/lib/useMyId";
 import type { ApprovalRequestDTO } from "@/lib/types";
 
 const REQUEST_TYPE_LABEL: Record<string, string> = {
@@ -12,24 +13,18 @@ const REQUEST_TYPE_LABEL: Record<string, string> = {
   room_settings_change: "房間設定變更",
 };
 
-type MeResponse = { member: { id: number } | null };
-
 export default function ApprovalsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
   const roomId = Number(id);
 
   const [requests, setRequests] = useState<ApprovalRequestDTO[]>([]);
-  const [myId, setMyId] = useState<number | null>(null);
+  const myId = useMyId();
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     try {
-      const [data, me] = await Promise.all([
-        apiFetch<{ requests: ApprovalRequestDTO[] }>(`/api/rooms/${roomId}/approvals`),
-        apiFetch<MeResponse>("/api/auth/me"),
-      ]);
+      const data = await apiFetch<{ requests: ApprovalRequestDTO[] }>(`/api/rooms/${roomId}/approvals`);
       setRequests(data.requests);
-      setMyId(me.member?.id ?? null);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "載入失敗");
     }

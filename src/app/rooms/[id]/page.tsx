@@ -4,9 +4,8 @@ import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { TugOfWar } from "@/components/TugOfWar";
+import { useMyId } from "@/lib/useMyId";
 import type { RoomDTO, ScoresDTO, SettlementRecordDTO, TaskTemplateDTO, TopUpDTO } from "@/lib/types";
-
-type MeResponse = { member: { id: number } | null };
 
 export default function RoomHomePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
@@ -17,7 +16,7 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
   const [tasks, setTasks] = useState<TaskTemplateDTO[]>([]);
   const [settlements, setSettlements] = useState<SettlementRecordDTO[]>([]);
   const [topUps, setTopUps] = useState<TopUpDTO[]>([]);
-  const [myId, setMyId] = useState<number | null>(null);
+  const myId = useMyId();
   const [error, setError] = useState<string | null>(null);
   const [topUpAmount, setTopUpAmount] = useState(100);
   const [showTopUp, setShowTopUp] = useState(false);
@@ -26,20 +25,18 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
 
   async function load() {
     try {
-      const [roomData, scoreData, taskData, settlementData, topUpData, me] = await Promise.all([
+      const [roomData, scoreData, taskData, settlementData, topUpData] = await Promise.all([
         apiFetch<{ room: RoomDTO }>(`/api/rooms/${roomId}`),
         apiFetch<ScoresDTO>(`/api/rooms/${roomId}/scores`),
         apiFetch<{ tasks: TaskTemplateDTO[] }>(`/api/rooms/${roomId}/tasks`),
         apiFetch<{ settlements: SettlementRecordDTO[] }>(`/api/rooms/${roomId}/settlements`),
         apiFetch<{ topUps: TopUpDTO[] }>(`/api/rooms/${roomId}/topup`),
-        apiFetch<MeResponse>("/api/auth/me"),
       ]);
       setRoom(roomData.room);
       setScores(scoreData);
       setTasks(taskData.tasks.filter((t) => t.status === "active").slice(0, 5));
       setSettlements(settlementData.settlements);
       setTopUps(topUpData.topUps);
-      setMyId(me.member?.id ?? null);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "載入失敗");
     }

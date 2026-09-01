@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { TaskDraftListEditor } from "@/components/TaskDraftListEditor";
 import { TIMEZONE_OPTIONS } from "@/lib/timezones";
+import { useMyId } from "@/lib/useMyId";
 import type {
   DraftContentDTO,
   IconAssetDTO,
@@ -12,8 +13,6 @@ import type {
   RoomCreationDraftDTO,
   RoomDTO,
 } from "@/lib/types";
-
-type MeResponse = { member: { id: number } | null };
 
 function toDatetimeLocal(iso: string) {
   const d = new Date(iso);
@@ -29,7 +28,7 @@ export default function DraftReviewPage({ params }: { params: Promise<{ id: stri
   const [room, setRoom] = useState<RoomDTO | null>(null);
   const [members, setMembers] = useState<MemberDTO[]>([]);
   const [drafts, setDrafts] = useState<RoomCreationDraftDTO[]>([]);
-  const [myId, setMyId] = useState<number | null>(null);
+  const myId = useMyId();
   const [icons, setIcons] = useState<IconAssetDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,16 +41,14 @@ export default function DraftReviewPage({ params }: { params: Promise<{ id: stri
   async function load() {
     setLoading(true);
     try {
-      const [roomData, draftData, me, iconData] = await Promise.all([
+      const [roomData, draftData, iconData] = await Promise.all([
         apiFetch<{ room: RoomDTO; members: MemberDTO[] }>(`/api/rooms/${roomId}`),
         apiFetch<{ drafts: RoomCreationDraftDTO[] }>(`/api/rooms/${roomId}/draft`),
-        apiFetch<MeResponse>("/api/auth/me"),
         apiFetch<{ assets: IconAssetDTO[] }>(`/api/rooms/${roomId}/icon-assets`).catch(() => ({ assets: [] })),
       ]);
       setRoom(roomData.room);
       setMembers(roomData.members);
       setDrafts(draftData.drafts);
-      setMyId(me.member?.id ?? null);
       setIcons(iconData.assets);
       if (roomData.room.status === "active") {
         router.replace(`/rooms/${roomId}`);
