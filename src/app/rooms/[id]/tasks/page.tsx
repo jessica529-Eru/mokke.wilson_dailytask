@@ -5,6 +5,7 @@ import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { StampIconPicker } from "@/components/StampIconPicker";
 import { FrameStamp } from "@/components/FrameStamp";
 import { MultiImageUploadField } from "@/components/MultiImageUploadField";
+import { ConditionPicker, type UnlockCondition } from "@/components/ConditionPicker";
 import type { AssignScope, IconAssetDTO, MemberDTO, RewardDTO, TaskTemplateDTO, TaskType } from "@/lib/types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -378,13 +379,9 @@ function TaskRow({
   const [error, setError] = useState<string | null>(null);
   const [justStamped, setJustStamped] = useState(false);
 
-  const [conditionType, setConditionType] = useState<"none" | "single_task" | "multi_task_threshold" | "streak_days">(
-    "none"
-  );
-  const [singleTaskId, setSingleTaskId] = useState<number | "">("");
-  const [multiTaskIds, setMultiTaskIds] = useState<number[]>([]);
-  const [threshold, setThreshold] = useState(3);
-  const [streakDays, setStreakDays] = useState(7);
+  const [unlockCondition, setUnlockCondition] = useState<UnlockCondition | undefined>(undefined);
+  const [changingQuotaReward, setChangingQuotaReward] = useState(false);
+  const [nextQuotaPoints, setNextQuotaPoints] = useState(task.points ?? 0);
 
   const canComplete =
     task.status === "active" && (task.assignScope === "both" || task.assignedToId === myId);
@@ -394,17 +391,6 @@ function TaskRow({
 
   async function complete() {
     setError(null);
-    let unlockCondition: { unlockConditionType: string; unlockConditionValue: Record<string, unknown> } | undefined;
-    if (conditionType === "single_task" && singleTaskId !== "") {
-      unlockCondition = { unlockConditionType: "single_task", unlockConditionValue: { taskId: singleTaskId } };
-    } else if (conditionType === "multi_task_threshold" && multiTaskIds.length > 0) {
-      unlockCondition = {
-        unlockConditionType: "multi_task_threshold",
-        unlockConditionValue: { taskIds: multiTaskIds, threshold },
-      };
-    } else if (conditionType === "streak_days") {
-      unlockCondition = { unlockConditionType: "streak_days", unlockConditionValue: { days: streakDays } };
-    }
     try {
       const localDate = new Intl.DateTimeFormat("en-CA").format(new Date());
       await apiFetch(`/api/rooms/${roomId}/tasks/${task.id}/complete`, {
@@ -419,7 +405,7 @@ function TaskRow({
       setCompleting(false);
       setProofText("");
       setProofImageUrls([]);
-      setConditionType("none");
+      setUnlockCondition(undefined);
       setJustStamped(true);
       setTimeout(() => setJustStamped(false), 700);
       onChanged();
@@ -438,16 +424,13 @@ function TaskRow({
     }
   }
 
-  async function requestQuotaRewardChange() {
-    const input = prompt("下一次完成時要改成多少點？（僅套用於下一次完成）", String(task.points ?? 0));
-    if (input === null) return;
-    const points = Number(input);
-    if (!Number.isFinite(points) || points < 0) return;
+  async function submitQuotaRewardChange() {
     try {
       await apiFetch(`/api/rooms/${roomId}/tasks/${task.id}/quota-reward-change`, {
         method: "POST",
-        body: JSON.stringify({ points }),
+        body: JSON.stringify({ points: nextQuotaPoints }),
       });
+      setChangingQuotaReward(false);
       onChanged();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "操作失敗");
@@ -502,88 +485,49 @@ function TaskRow({
                   />
                   <MultiImageUploadField value={proofImageUrls} onChange={setProofImageUrls} />
 
-                  <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
-                    <div className="font-medium text-slate-600">
-                      對方解鎖條件（選填，對方要達成才能看到這則郵票內容）
+                  <div>
+                    <div className="mb-1 text-xs text-slate-500">
+                      對方解鎖條件（選填，對方要達成才能看到這則郵票內容；不設定 = 對方永遠看不到）
                     </div>
-                    <select
-                      className="rounded-lg border border-slate-300 px-2 py-1"
-                      value={conditionType}
-                      onChange={(e) => setConditionType(e.target.value as typeof conditionType)}
-                    >
-                      <option value="none">不設定（對方永遠看不到）</option>
-                      <option value="single_task">完成指定任務一次</option>
-                      <option value="multi_task_threshold">完成多個任務達門檻次數</option>
-                      <option value="streak_days">連續天數達標</option>
-                    </select>
-
-                    {conditionType === "single_task" && (
-                      <select
-                        className="w-full rounded-lg border border-slate-300 px-2 py-1"
-                        value={singleTaskId}
-                        onChange={(e) => setSingleTaskId(Number(e.target.value))}
-                      >
-                        <option value="">選擇任務</option>
-                        {allTasks.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.title}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-
-                    {conditionType === "multi_task_threshold" && (
-                      <div className="space-y-1">
-                        {allTasks.map((t) => (
-                          <label key={t.id} className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={multiTaskIds.includes(t.id)}
-                              onChange={(e) =>
-                                setMultiTaskIds((prev) =>
-                                  e.target.checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
-                                )
-                              }
-                            />
-                            {t.title}
-                          </label>
-                        ))}
-                        <label className="flex items-center gap-2">
-                          門檻次數
-                          <input
-                            type="number"
-                            min={1}
-                            className="w-20 rounded-lg border border-slate-300 px-2 py-1"
-                            value={threshold}
-                            onChange={(e) => setThreshold(Number(e.target.value))}
-                          />
-                        </label>
-                      </div>
-                    )}
-
-                    {conditionType === "streak_days" && (
-                      <label className="flex items-center gap-2">
-                        連續天數
-                        <input
-                          type="number"
-                          min={1}
-                          className="w-20 rounded-lg border border-slate-300 px-2 py-1"
-                          value={streakDays}
-                          onChange={(e) => setStreakDays(Number(e.target.value))}
-                        />
-                      </label>
-                    )}
+                    <ConditionPicker tasks={allTasks} onChange={setUnlockCondition} noneLabel="不設定（對方永遠看不到）" />
                   </div>
                 </>
               )}
               <div className="flex gap-2">
-                <button onClick={() => setCompleting(false)} className="flex-1 rounded-lg border border-slate-300 py-2 text-sm">
+                <button
+                  onClick={() => {
+                    setCompleting(false);
+                    setUnlockCondition(undefined);
+                  }}
+                  className="flex-1 rounded-lg border border-slate-300 py-2 text-sm"
+                >
                   取消
                 </button>
                 <button onClick={complete} className="flex-1 rounded-lg bg-emerald-600 py-2 text-sm text-white">
                   確認完成
                 </button>
               </div>
+            </div>
+          ) : changingQuotaReward ? (
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                下一次完成改成
+                <input
+                  type="number"
+                  min={0}
+                  autoFocus
+                  className="w-20 rounded-lg border border-slate-300 px-2 py-1"
+                  value={nextQuotaPoints}
+                  onChange={(e) => setNextQuotaPoints(Number(e.target.value))}
+                />
+                點
+              </label>
+              <button onClick={() => setChangingQuotaReward(false)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+                取消
+              </button>
+              <button onClick={submitQuotaRewardChange} className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm text-white">
+                確認
+              </button>
             </div>
           ) : (
             <div className="flex gap-2">
@@ -598,7 +542,10 @@ function TaskRow({
               </button>
               {task.type === "extra_quota" && (
                 <button
-                  onClick={requestQuotaRewardChange}
+                  onClick={() => {
+                    setNextQuotaPoints(task.points ?? 0);
+                    setChangingQuotaReward(true);
+                  }}
                   className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-700"
                 >
                   變更下次獎勵

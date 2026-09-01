@@ -3,6 +3,7 @@
 import { useEffect, useState, use as usePromise } from "react";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { MultiImageUploadField } from "@/components/MultiImageUploadField";
+import { ConditionPicker, type UnlockCondition } from "@/components/ConditionPicker";
 import type { MemberDTO, RewardDTO, TaskTemplateDTO } from "@/lib/types";
 
 type StreakDTO = {
@@ -33,6 +34,8 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
   const [myId, setMyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [redeemingRewardId, setRedeemingRewardId] = useState<number | null>(null);
+  const [makeupDate, setMakeupDate] = useState("");
 
   async function load() {
     try {
@@ -55,15 +58,23 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
 
   const colorByMemberId = new Map(members.map((m) => [m.id, m.color]));
 
-  async function redeemVoucher(rewardId: number) {
-    const today = new Intl.DateTimeFormat("en-CA").format(new Date());
-    const input = prompt("要回補哪一天？（最近 14 天內，格式 YYYY-MM-DD）", today);
-    if (!input) return;
+  const today = new Intl.DateTimeFormat("en-CA").format(new Date());
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+  const earliestMakeupDate = new Intl.DateTimeFormat("en-CA").format(fourteenDaysAgo);
+
+  function startRedeemVoucher(rewardId: number) {
+    setRedeemingRewardId(rewardId);
+    setMakeupDate(today);
+  }
+
+  async function confirmRedeemVoucher(rewardId: number) {
     try {
       await apiFetch(`/api/rooms/${roomId}/rescue-vouchers/use`, {
         method: "POST",
-        body: JSON.stringify({ rewardId, makeupForDate: input }),
+        body: JSON.stringify({ rewardId, makeupForDate: makeupDate }),
       });
+      setRedeemingRewardId(null);
       load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "使用失敗");
@@ -143,13 +154,15 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
                 </div>
                 {r.type === "rescue_voucher" ? (
                   r.unlocked ? (
-                    <button
-                      onClick={() => redeemVoucher(r.id)}
-                      disabled={r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0}
-                      className="rounded-lg bg-amber-600 px-3 py-1 text-xs text-white disabled:opacity-40"
-                    >
-                      使用補救券
-                    </button>
+                    redeemingRewardId !== r.id && (
+                      <button
+                        onClick={() => startRedeemVoucher(r.id)}
+                        disabled={r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0}
+                        className="rounded-lg bg-amber-600 px-3 py-1 text-xs text-white disabled:opacity-40"
+                      >
+                        使用補救券
+                      </button>
+                    )
                   ) : (
                     <span className="text-xs text-slate-400" title="只有達成解鎖條件的本人才能使用">
                       🔒 尚未解鎖
@@ -161,6 +174,34 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
                   </span>
                 )}
               </div>
+              {redeemingRewardId === r.id && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-2 text-xs">
+                  <label className="flex items-center gap-1.5">
+                    要回補哪一天？
+                    <input
+                      type="date"
+                      autoFocus
+                      className="rounded-lg border border-slate-300 px-2 py-1"
+                      value={makeupDate}
+                      min={earliestMakeupDate}
+                      max={today}
+                      onChange={(e) => setMakeupDate(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    onClick={() => setRedeemingRewardId(null)}
+                    className="rounded-lg border border-slate-300 px-2 py-1"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => confirmRedeemVoucher(r.id)}
+                    className="rounded-lg bg-amber-600 px-2 py-1 text-white"
+                  >
+                    確認回補
+                  </button>
+                </div>
+              )}
               {r.unlocked && r.contentText && <p className="mt-2 text-sm text-slate-600">{r.contentText}</p>}
               {r.unlocked && r.contentImageUrls && r.contentImageUrls.length > 0 && (
                 <div className="mt-2 space-y-2">
@@ -193,30 +234,12 @@ function NewRewardForm({
   const [contentText, setContentText] = useState("");
   const [contentImageUrls, setContentImageUrls] = useState<string[]>([]);
   const [stockTotal, setStockTotal] = useState<number | "">("");
-  const [conditionType, setConditionType] = useState<"none" | "single_task" | "multi_task_threshold" | "streak_days">(
-    "none"
-  );
-  const [singleTaskId, setSingleTaskId] = useState<number | "">("");
-  const [multiTaskIds, setMultiTaskIds] = useState<number[]>([]);
-  const [threshold, setThreshold] = useState(3);
-  const [streakDays, setStreakDays] = useState(7);
+  const [assignment, setAssignment] = useState<UnlockCondition | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-
-    let assignment: { unlockConditionType: string; unlockConditionValue: Record<string, unknown> } | undefined;
-    if (conditionType === "single_task" && singleTaskId !== "") {
-      assignment = { unlockConditionType: "single_task", unlockConditionValue: { taskId: singleTaskId } };
-    } else if (conditionType === "multi_task_threshold" && multiTaskIds.length > 0) {
-      assignment = {
-        unlockConditionType: "multi_task_threshold",
-        unlockConditionValue: { taskIds: multiTaskIds, threshold },
-      };
-    } else if (conditionType === "streak_days") {
-      assignment = { unlockConditionType: "streak_days", unlockConditionValue: { days: streakDays } };
-    }
 
     try {
       await apiFetch(`/api/rooms/${roomId}/rewards`, {
@@ -281,75 +304,9 @@ function NewRewardForm({
         </label>
       </div>
 
-      <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
-        <div className="font-medium text-slate-600">解鎖條件（選填）</div>
-        <select
-          className="rounded-lg border border-slate-300 px-2 py-1"
-          value={conditionType}
-          onChange={(e) => setConditionType(e.target.value as typeof conditionType)}
-        >
-          <option value="none">不設定（手動指派）</option>
-          <option value="single_task">完成指定任務一次</option>
-          <option value="multi_task_threshold">完成多個任務達門檻次數</option>
-          <option value="streak_days">連續天數達標</option>
-        </select>
-
-        {conditionType === "single_task" && (
-          <select
-            className="w-full rounded-lg border border-slate-300 px-2 py-1"
-            value={singleTaskId}
-            onChange={(e) => setSingleTaskId(Number(e.target.value))}
-          >
-            <option value="">選擇任務</option>
-            {tasks.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.title}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {conditionType === "multi_task_threshold" && (
-          <div className="space-y-1">
-            {tasks.map((t) => (
-              <label key={t.id} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={multiTaskIds.includes(t.id)}
-                  onChange={(e) =>
-                    setMultiTaskIds((prev) =>
-                      e.target.checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)
-                    )
-                  }
-                />
-                {t.title}
-              </label>
-            ))}
-            <label className="flex items-center gap-2">
-              門檻次數
-              <input
-                type="number"
-                min={1}
-                className="w-20 rounded-lg border border-slate-300 px-2 py-1"
-                value={threshold}
-                onChange={(e) => setThreshold(Number(e.target.value))}
-              />
-            </label>
-          </div>
-        )}
-
-        {conditionType === "streak_days" && (
-          <label className="flex items-center gap-2">
-            連續天數
-            <input
-              type="number"
-              min={1}
-              className="w-20 rounded-lg border border-slate-300 px-2 py-1"
-              value={streakDays}
-              onChange={(e) => setStreakDays(Number(e.target.value))}
-            />
-          </label>
-        )}
+      <div>
+        <div className="mb-1 text-xs text-slate-500">解鎖條件（選填）</div>
+        <ConditionPicker tasks={tasks} onChange={setAssignment} />
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
