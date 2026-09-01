@@ -1,7 +1,11 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
-import { getCurrentMoneyPool } from "@/lib/money";
+import { getCurrentMoneyPool, getCurrentPeriodStart } from "@/lib/money";
 import { logAudit } from "@/lib/audit";
+
+export { getCurrentPeriodStart };
+
+const UNIQUE_CONSTRAINT_ERROR_CODE = "P2002";
 
 /**
  * Section 10.11. Lazily triggered (no cron in this deployment) from any
@@ -35,43 +39,61 @@ export async function runSettlementIfDue(roomId: number) {
 
   const members = await db.roomMember.findMany({ where: { roomId } });
 
-  const record = await db.$transaction(async (tx) => {
-    const grouped = await tx.taskCompletion.groupBy({
-      by: ["roomMemberId"],
-      where: {
-        roomMember: { roomId },
-        completedAt: { gte: periodStart, lt: periodEnd },
-      },
-      _sum: { pointsAwarded: true },
+  // This whole function is lazily triggered from ordinary page-load
+  // requests, so it's normal for two requests (e.g. the room summary and
+  // scores endpoints, fetched in the same Promise.all on a page) to both
+  // reach here concurrently, both see "not settled yet" above, and both
+  // try to create a SettlementRecord for the same period — the exact
+  // "two settlement rows for one period" symptom reported. The
+  // @@unique([roomId, periodEnd]) constraint on SettlementRecord makes
+  // that impossible at the database level; whichever request loses the
+  // race gets a unique-constraint error here, which just means the other
+  // one already did the job, so it's swallowed as a no-op.
+  let record;
+  try {
+    record = await db.$transaction(async (tx) => {
+      const grouped = await tx.taskCompletion.groupBy({
+        by: ["roomMemberId"],
+        where: {
+          roomMember: { roomId },
+          completedAt: { gte: periodStart, lt: periodEnd },
+        },
+        _sum: { pointsAwarded: true },
+      });
+      const scoreByMember = new Map(grouped.map((g) => [g.roomMemberId, g._sum.pointsAwarded ?? 0]));
+      const memberScores: Record<string, number> = {};
+      for (const m of members) memberScores[m.id] = scoreByMember.get(m.id) ?? 0;
+
+      const totalScore = Object.values(memberScores).reduce((a, b) => a + b, 0);
+      const finalMoneyPool = await getCurrentMoneyPool(roomId, room.initialMoneyPool);
+
+      const moneyDistribution: Record<string, number> = {};
+      for (const m of members) {
+        const ratio = totalScore > 0 ? memberScores[m.id] / totalScore : 1 / members.length;
+        moneyDistribution[m.id] = Math.round(finalMoneyPool * ratio * 100) / 100;
+      }
+
+      const record = await tx.settlementRecord.create({
+        data: {
+          roomId,
+          periodStart,
+          periodEnd,
+          memberScores: JSON.stringify(memberScores),
+          finalMoneyPool,
+          moneyDistribution: JSON.stringify(moneyDistribution),
+        },
+      });
+
+      await resetQuotaTasksForNextPeriod(tx, roomId);
+
+      return record;
     });
-    const scoreByMember = new Map(grouped.map((g) => [g.roomMemberId, g._sum.pointsAwarded ?? 0]));
-    const memberScores: Record<string, number> = {};
-    for (const m of members) memberScores[m.id] = scoreByMember.get(m.id) ?? 0;
-
-    const totalScore = Object.values(memberScores).reduce((a, b) => a + b, 0);
-    const finalMoneyPool = await getCurrentMoneyPool(roomId, room.initialMoneyPool);
-
-    const moneyDistribution: Record<string, number> = {};
-    for (const m of members) {
-      const ratio = totalScore > 0 ? memberScores[m.id] / totalScore : 1 / members.length;
-      moneyDistribution[m.id] = Math.round(finalMoneyPool * ratio * 100) / 100;
+  } catch (err) {
+    if (typeof err === "object" && err !== null && "code" in err && err.code === UNIQUE_CONSTRAINT_ERROR_CODE) {
+      return;
     }
-
-    const record = await tx.settlementRecord.create({
-      data: {
-        roomId,
-        periodStart,
-        periodEnd,
-        memberScores: JSON.stringify(memberScores),
-        finalMoneyPool,
-        moneyDistribution: JSON.stringify(moneyDistribution),
-      },
-    });
-
-    await resetQuotaTasksForNextPeriod(tx, roomId);
-
-    return record;
-  });
+    throw err;
+  }
 
   await logAudit({
     roomId,
@@ -87,13 +109,4 @@ async function resetQuotaTasksForNextPeriod(tx: Prisma.TransactionClient, roomId
     where: { roomId, type: "extra_quota", status: "active" },
     data: { quotaUsed: 0 },
   });
-}
-
-/** The start of the room's current (unsettled) scoring period. */
-export async function getCurrentPeriodStart(roomId: number): Promise<Date> {
-  const [room, latest] = await Promise.all([
-    db.room.findUniqueOrThrow({ where: { id: roomId } }),
-    db.settlementRecord.findFirst({ where: { roomId }, orderBy: { periodEnd: "desc" } }),
-  ]);
-  return latest?.periodEnd ?? room.createdAt;
 }

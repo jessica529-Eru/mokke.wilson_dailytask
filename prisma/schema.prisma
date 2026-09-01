@@ -375,6 +375,11 @@ model SettlementRecord {
   moneyDistribution String   @map("money_distribution") // JSON
   createdAt         DateTime @default(now()) @map("created_at")
 
+  // Guards against runSettlementIfDue's lazy trigger firing twice
+  // concurrently (two requests both seeing "not settled yet" and both
+  // trying to close out the same period) — the loser gets a unique
+  // constraint error instead of a duplicate row.
+  @@unique([roomId, periodEnd])
   @@map("settlement_records")
 }
 
