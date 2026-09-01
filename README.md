@@ -31,21 +31,41 @@ SESSION_SECRET="<random 32-byte hex>"
 
 ## 目前實作範圍
 
-依 `PROJECT_SPEC_v2.md` 第 13 節優先順序，已完成第 1–4 項的完整資料模型與核心流程：
+依 `PROJECT_SPEC_v2.md` 第 13 節優先順序，已完成第 1、2、3、4、6、8、9、10、11、12、13、15 項：
 
 1. Room / RoomMember / 邀請碼與登入機制
 2. RoomCreationDraft 卷軸契約往返流程（含蓋章/退回動畫、無限次來回修改）
 3. TaskTemplate（daily / extra_normal / extra_quota，含 assign_scope）/ TaskCompletion
 4. TaskApprovalRequest 核准流程（含逾期自動核准/拒絕）
+5. IconAsset 圖示資產庫（靜態 SVG，動畫影格未做）
+6. 月曆蓋章視覺（`/rooms/[id]/calendar`，含 10.9 郵票可見度權限過濾）
+7. 首頁拉鋸戰比例尺視覺（即時比例、獎金池、加碼掉落動畫、即時試算）
+8. Reward / RewardAssignment / RewardUnlock（`/rooms/[id]/rewards`，含 single_task /
+   multi_task_threshold / streak_days 自動解鎖判定）
+9. MoneyPoolTopUp 加碼機制與掉落動畫
+10. extra_quota 任務與額度獎勵變更（`change_quota_reward` 審核流程 + UI）
+11. StreakRecord / RescueVoucherUsage（連續天數計算、補救券使用與回補後的
+    連續天數重新計算）
+12. 驚喜任務觸發機制
+13. SettlementRecord 結算邏輯（詳見下方「結算機制」小節）
+14. Notification 全類型（`/rooms/[id]/notifications`，站內未讀提示；尚無
+    Web Push 推播）
+15. AuditLog（無 UI，寫入卷軸核准、任務審核、加碼、結算等關鍵操作）
 
-另外提前完成了與上述流程緊密相關的部分：
+### 結算機制設計取捨
 
-- 首頁拉鋸戰視覺化（即時比例、獎金池、加碼、即時試算）
-- 月曆蓋章所需的資料層（IconAsset 圖示庫、Reward 郵票自動產生）
-- 驚喜任務隨機觸發機制（完成任務時擲骰、產生系統任務、不遞迴觸發）
-- 通知中心資料層（Notification 建立，尚無 Web Push）
+- 沒有背景排程器，改採「惰性觸發」：任何讀取 `/api/rooms/:id/scores` 或
+  `/api/rooms/:id/settlements` 的請求，都會先檢查 `Room.settlementDate`
+  是否已過期，過期且尚未結算則立即執行結算（`src/lib/settlement.ts`）。
+- 積分「歸零」不是刪除 `TaskCompletion`，而是把計分範圍改成「自上次結算
+  以來」——`/scores` 與結算計算都以此為準，歷史紀錄完整保留。
+- `settlementDate` 的設定/更新目前是任一方可直接設定（比照加碼，不走
+  `room_settings_change` 審核流程），保留該 request type 供未來擴充。
+- 額度已用完的 `extra_quota` 沿用/封存（10.13）由使用者手動決定，尚無對應
+  UI；結算時只處理「未用完額度作廢」（10.11 第 2 點）。
 
-Prisma schema（`prisma/schema.prisma`）已涵蓋規格書第 9 節全部資料表，尚未實作 UI/邏輯的部分（月曆視覺、結算流程、連續天數/補救券完整互動、Web Push 通知）留待後續迭代。
+尚未實作：Web Push 通知、卷軸契約以外的 `room_settings_change` 審核 UI、
+IconAsset 多影格動畫、額度沿用/封存 UI。
 
 ## 專案結構
 

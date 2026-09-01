@@ -5,6 +5,7 @@ import { requireRoomMember } from "@/lib/currentMember";
 import { ApiError, handleApiError } from "@/lib/api";
 import { applyApprovalOutcome } from "@/lib/taskLifecycle";
 import { notify } from "@/lib/notify";
+import { logAudit } from "@/lib/audit";
 
 const respondSchema = z.object({ action: z.enum(["approve", "reject"]) });
 
@@ -45,6 +46,14 @@ export async function POST(
       type: approve ? "task_approved" : "task_rejected",
       relatedEntityType: "TaskApprovalRequest",
       relatedEntityId: request.id,
+    });
+    await logAudit({
+      roomId,
+      actorRoomMemberId: member.id,
+      actionType: approve ? "approval_approved" : "approval_rejected",
+      targetEntityType: "TaskApprovalRequest",
+      targetEntityId: request.id,
+      changeSummary: { requestType: request.requestType },
     });
 
     return NextResponse.json({ ok: true, status: approve ? "approved" : "rejected" });

@@ -4,7 +4,7 @@ import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { TugOfWar } from "@/components/TugOfWar";
-import type { RoomDTO, ScoresDTO, TaskTemplateDTO } from "@/lib/types";
+import type { RoomDTO, ScoresDTO, SettlementRecordDTO, TaskTemplateDTO } from "@/lib/types";
 
 export default function RoomHomePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
@@ -13,21 +13,25 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
   const [room, setRoom] = useState<RoomDTO | null>(null);
   const [scores, setScores] = useState<ScoresDTO | null>(null);
   const [tasks, setTasks] = useState<TaskTemplateDTO[]>([]);
+  const [settlements, setSettlements] = useState<SettlementRecordDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [topUpAmount, setTopUpAmount] = useState(100);
   const [showTopUp, setShowTopUp] = useState(false);
   const [coinAnim, setCoinAnim] = useState(false);
+  const [settlementInput, setSettlementInput] = useState("");
 
   async function load() {
     try {
-      const [roomData, scoreData, taskData] = await Promise.all([
+      const [roomData, scoreData, taskData, settlementData] = await Promise.all([
         apiFetch<{ room: RoomDTO }>(`/api/rooms/${roomId}`),
         apiFetch<ScoresDTO>(`/api/rooms/${roomId}/scores`),
         apiFetch<{ tasks: TaskTemplateDTO[] }>(`/api/rooms/${roomId}/tasks`),
+        apiFetch<{ settlements: SettlementRecordDTO[] }>(`/api/rooms/${roomId}/settlements`),
       ]);
       setRoom(roomData.room);
       setScores(scoreData);
       setTasks(taskData.tasks.filter((t) => t.status === "active").slice(0, 5));
+      setSettlements(settlementData.settlements);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "載入失敗");
     }
@@ -51,6 +55,20 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
       load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "加碼失敗");
+    }
+  }
+
+  async function handleSetSettlementDate() {
+    if (!settlementInput) return;
+    try {
+      await apiFetch(`/api/rooms/${roomId}/settlement-date`, {
+        method: "POST",
+        body: JSON.stringify({ settlementDate: new Date(settlementInput).toISOString() }),
+      });
+      setSettlementInput("");
+      load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "設定失敗");
     }
   }
 
@@ -113,6 +131,49 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
           ))}
         </div>
         <p className="mt-2 text-xs text-amber-600">※ 僅為即時試算，非最終結算結果</p>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-3 font-semibold">結算</h2>
+        {room.settlementDate ? (
+          <p className="text-sm text-slate-600">
+            下次結算：{new Date(room.settlementDate).toLocaleString()}
+          </p>
+        ) : (
+          <p className="text-sm text-slate-400">尚未設定結算日期</p>
+        )}
+        <div className="mt-2 flex gap-2">
+          <input
+            type="datetime-local"
+            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            value={settlementInput}
+            onChange={(e) => setSettlementInput(e.target.value)}
+          />
+          <button onClick={handleSetSettlementDate} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">
+            設定
+          </button>
+        </div>
+
+        {settlements.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <div className="text-xs text-slate-400">歷史結算紀錄</div>
+            {settlements.map((s) => (
+              <div key={s.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                <div className="text-slate-500">
+                  {new Date(s.periodStart).toLocaleDateString()} – {new Date(s.periodEnd).toLocaleDateString()}
+                </div>
+                {scores.members.map((m) => (
+                  <div key={m.id} className="flex justify-between">
+                    <span style={{ color: m.color }}>{m.displayNickname}</span>
+                    <span>
+                      {s.memberScores[m.id] ?? 0} 點 · {s.moneyDistribution[m.id] ?? 0} 元
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>

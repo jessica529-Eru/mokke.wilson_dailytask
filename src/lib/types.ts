@@ -108,3 +108,49 @@ export type ApprovalRequestDTO = {
 };
 
 export type IconAssetDTO = { id: number; name: string; frames: string[] };
+
+export type CalendarDayDTO = {
+  date: string;
+  stamps: { taskTemplateId: number; title: string; icon: string[] | null; points: number; isSystemGenerated: boolean }[];
+  producedStamp: {
+    rewardId: number;
+    title: string;
+    unlocked: boolean;
+    contentText: string | null;
+    contentImageUrls: string[] | null;
+  } | null;
+};
+
+export type CalendarDTO = { memberId: number; isOwner: boolean; days: CalendarDayDTO[] };
+
+export type RewardDTO = {
+  id: number;
+  type: "produced_content" | "fixed_item" | "rescue_voucher" | "other";
+  title: string;
+  contentText: string | null;
+  contentImageUrls: string[] | null;
+  stockTotal: number | null;
+  stockRemaining: number | null;
+  createdById: number;
+  unlocked: boolean;
+  createdAt: string;
+};
+
+export type NotificationDTO = {
+  id: number;
+  type: string;
+  relatedEntityType: string | null;
+  relatedEntityId: number | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+export type SettlementRecordDTO = {
+  id: number;
+  periodStart: string;
+  periodEnd: string;
+  memberScores: Record<string, number>;
+  finalMoneyPool: number;
+  moneyDistribution: Record<string, number>;
+  createdAt: string;
+};

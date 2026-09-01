@@ -259,6 +259,22 @@ function TaskRow({
     }
   }
 
+  async function requestQuotaRewardChange() {
+    const input = prompt("下一次完成時要改成多少點？（僅套用於下一次完成）", String(task.points ?? 0));
+    if (input === null) return;
+    const points = Number(input);
+    if (!Number.isFinite(points) || points < 0) return;
+    try {
+      await apiFetch(`/api/rooms/${roomId}/tasks/${task.id}/quota-reward-change`, {
+        method: "POST",
+        body: JSON.stringify({ points }),
+      });
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "操作失敗");
+    }
+  }
+
   return (
     <li className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
@@ -318,6 +334,14 @@ function TaskRow({
               <button onClick={requestDelete} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600">
                 提出刪除
               </button>
+              {task.type === "extra_quota" && (
+                <button
+                  onClick={requestQuotaRewardChange}
+                  className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-700"
+                >
+                  變更下次獎勵
+                </button>
+              )}
             </div>
           )}
         </div>

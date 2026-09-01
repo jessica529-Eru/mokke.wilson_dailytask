@@ -59,6 +59,67 @@ export async function bumpStreak(
 }
 
 /**
+ * Rebuilds the "any_daily_task" streak from scratch off the full history of
+ * daily-task completion dates plus rescue-voucher makeup dates (section
+ * 10.10). Used after a rescue voucher is redeemed, since a makeup date can
+ * land in the middle of existing history and change both the current and
+ * longest streak, which the incremental bumpStreak() can't handle.
+ */
+export async function recomputeAnyDailyStreak(
+  tx: Prisma.TransactionClient,
+  params: { roomId: number; roomMemberId: number }
+) {
+  const [completions, usages] = await Promise.all([
+    tx.taskCompletion.findMany({
+      where: {
+        roomMemberId: params.roomMemberId,
+        taskTemplate: { roomId: params.roomId, type: "daily", streakCountsTowardDaily: true },
+      },
+      select: { completedLocalDate: true },
+    }),
+    tx.rescueVoucherUsage.findMany({
+      where: { roomMemberId: params.roomMemberId, reward: { roomId: params.roomId } },
+      select: { makeupForDate: true },
+    }),
+  ]);
+
+  const dates = Array.from(
+    new Set([...completions.map((c) => c.completedLocalDate), ...usages.map((u) => u.makeupForDate)])
+  ).sort();
+
+  if (dates.length === 0) return;
+
+  let longest = 1;
+  let current = 1;
+  for (let i = 1; i < dates.length; i++) {
+    const prev = new Date(dates[i - 1] + "T00:00:00Z");
+    const cur = new Date(dates[i] + "T00:00:00Z");
+    const diffDays = Math.round((cur.getTime() - prev.getTime()) / 86_400_000);
+    current = diffDays === 1 ? current + 1 : 1;
+    longest = Math.max(longest, current);
+  }
+
+  await tx.streakRecord.upsert({
+    where: {
+      roomId_roomMemberId_streakType: {
+        roomId: params.roomId,
+        roomMemberId: params.roomMemberId,
+        streakType: "any_daily_task",
+      },
+    },
+    update: { currentStreak: current, longestStreak: longest, lastActiveLocalDate: dates[dates.length - 1] },
+    create: {
+      roomId: params.roomId,
+      roomMemberId: params.roomMemberId,
+      streakType: "any_daily_task",
+      currentStreak: current,
+      longestStreak: longest,
+      lastActiveLocalDate: dates[dates.length - 1],
+    },
+  });
+}
+
+/**
  * Section 6.1: when a proof-requiring task is completed with photo/text
  * content, it auto-produces a "stamp" Reward. The producer can always see
  * their own stamp on their calendar; visibility for the partner is gated by

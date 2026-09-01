@@ -36,8 +36,17 @@ export default async function RoomLayout({
               <Link href={`/rooms/${roomId}/tasks`} className="hover:text-slate-900">
                 任務
               </Link>
+              <Link href={`/rooms/${roomId}/calendar`} className="hover:text-slate-900">
+                月曆
+              </Link>
+              <Link href={`/rooms/${roomId}/rewards`} className="hover:text-slate-900">
+                獎勵庫
+              </Link>
               <Link href={`/rooms/${roomId}/approvals`} className="hover:text-slate-900">
                 審核中心
+              </Link>
+              <Link href={`/rooms/${roomId}/notifications`} className="hover:text-slate-900">
+                通知
               </Link>
             </nav>
           )}

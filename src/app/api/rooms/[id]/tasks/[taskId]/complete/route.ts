@@ -4,6 +4,7 @@ import { requireRoomMember, getPartner } from "@/lib/currentMember";
 import { ApiError, handleApiError } from "@/lib/api";
 import { completeTaskSchema } from "@/lib/taskInput";
 import { localDateInTimezone, bumpStreak, createProducedStamp, maybeTriggerSurpriseTask } from "@/lib/taskLifecycle";
+import { checkRewardUnlocks, notifyRewardUnlocks } from "@/lib/rewards";
 import { notify } from "@/lib/notify";
 
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/tasks/[taskId]/complete">) {
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
 
     const partner = await getPartner(roomId, member.id);
 
-    const { completion, stampReward, surpriseTask } = await db.$transaction(async (tx) => {
+    const { completion, stampReward, surpriseTask, unlockedRewardIds } = await db.$transaction(async (tx) => {
       const completion = await tx.taskCompletion.create({
         data: {
           taskTemplateId: task.id,
@@ -115,8 +116,14 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
         });
       }
 
-      return { completion, stampReward, surpriseTask };
+      const unlockedRewardIds = await checkRewardUnlocks(tx, { roomId, roomMemberId: member.id });
+
+      return { completion, stampReward, surpriseTask, unlockedRewardIds };
     });
+
+    if (unlockedRewardIds.length > 0) {
+      await notifyRewardUnlocks(roomId, member.id, unlockedRewardIds);
+    }
 
     if (partner && surpriseTask) {
       await Promise.all([

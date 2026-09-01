@@ -5,6 +5,7 @@ import { requireRoomMember } from "@/lib/currentMember";
 import { ApiError, handleApiError } from "@/lib/api";
 import { getCurrentMoneyPool } from "@/lib/money";
 import { notify } from "@/lib/notify";
+import { logAudit } from "@/lib/audit";
 
 const topUpSchema = z.object({ amount: z.number().positive().max(1_000_000) });
 
@@ -25,8 +26,16 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
       throw new ApiError(409, "房間尚未成立");
     }
 
-    await db.moneyPoolTopUp.create({
+    const topUp = await db.moneyPoolTopUp.create({
       data: { roomId, addedById: member.id, amount: body.amount },
+    });
+    await logAudit({
+      roomId,
+      actorRoomMemberId: member.id,
+      actionType: "money_topped_up",
+      targetEntityType: "MoneyPoolTopUp",
+      targetEntityId: topUp.id,
+      changeSummary: { amount: body.amount },
     });
 
     const currentMoneyPool = await getCurrentMoneyPool(roomId, room.initialMoneyPool);

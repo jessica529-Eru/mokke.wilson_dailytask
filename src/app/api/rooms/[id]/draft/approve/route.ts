@@ -4,6 +4,7 @@ import { requireRoomMember } from "@/lib/currentMember";
 import { ApiError, handleApiError } from "@/lib/api";
 import { draftContentSnapshotSchema, materializeDraftTasks } from "@/lib/roomDraft";
 import { notify } from "@/lib/notify";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(_req: Request, ctx: RouteContext<"/api/rooms/[id]/draft/approve">) {
   try {
@@ -59,6 +60,13 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/rooms/[id]/dra
       type: "room_draft_approved",
       relatedEntityType: "RoomCreationDraft",
       relatedEntityId: latest.id,
+    });
+    await logAudit({
+      roomId,
+      actorRoomMemberId: member.id,
+      actionType: "room_draft_approved",
+      targetEntityType: "RoomCreationDraft",
+      targetEntityId: latest.id,
     });
 
     return NextResponse.json({ ok: true, roomStatus: "active" });
