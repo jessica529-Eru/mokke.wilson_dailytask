@@ -45,6 +45,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
     }
 
     let pointsAwarded = task.points ?? 0;
+    let overrideRewardId: number | null = null;
     if (task.type === "extra_quota") {
       const override = await db.taskApprovalRequest.findFirst({
         where: {
@@ -56,8 +57,9 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
         orderBy: { resolvedAt: "desc" },
       });
       if (override) {
-        const payload = JSON.parse(override.payload) as { points?: number };
+        const payload = JSON.parse(override.payload) as { points?: number; rewardId?: number };
         if (typeof payload.points === "number") pointsAwarded = payload.points;
+        if (typeof payload.rewardId === "number") overrideRewardId = payload.rewardId;
       }
     }
 
@@ -126,6 +128,30 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
       }
 
       const unlockedRewardIds = await checkRewardUnlocks(tx, { roomId, roomMemberId: member.id });
+
+      // A quota-reward-change override can grant a specific reward-library
+      // item directly for this one completion, separate from any
+      // condition-based unlock checkRewardUnlocks just ran.
+      if (overrideRewardId !== null) {
+        const existingUnlock = await tx.rewardUnlock.findUnique({
+          where: { rewardId_roomMemberId: { rewardId: overrideRewardId, roomMemberId: member.id } },
+        });
+        if (!existingUnlock) {
+          const reward = await tx.reward.findUnique({ where: { id: overrideRewardId } });
+          if (reward && (reward.stockTotal === null || (reward.stockRemaining ?? 0) > 0)) {
+            await tx.rewardUnlock.create({
+              data: { rewardId: overrideRewardId, roomMemberId: member.id },
+            });
+            if (reward.stockTotal !== null) {
+              await tx.reward.update({
+                where: { id: overrideRewardId },
+                data: { stockRemaining: { decrement: 1 } },
+              });
+            }
+            unlockedRewardIds.push(overrideRewardId);
+          }
+        }
+      }
 
       return { completion, stampReward, surpriseTask, unlockedRewardIds };
     });

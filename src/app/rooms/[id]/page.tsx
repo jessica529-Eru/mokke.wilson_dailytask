@@ -4,7 +4,9 @@ import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { TugOfWar } from "@/components/TugOfWar";
-import type { RoomDTO, ScoresDTO, SettlementRecordDTO, TaskTemplateDTO } from "@/lib/types";
+import type { RoomDTO, ScoresDTO, SettlementRecordDTO, TaskTemplateDTO, TopUpDTO } from "@/lib/types";
+
+type MeResponse = { member: { id: number } | null };
 
 export default function RoomHomePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
@@ -14,6 +16,8 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
   const [scores, setScores] = useState<ScoresDTO | null>(null);
   const [tasks, setTasks] = useState<TaskTemplateDTO[]>([]);
   const [settlements, setSettlements] = useState<SettlementRecordDTO[]>([]);
+  const [topUps, setTopUps] = useState<TopUpDTO[]>([]);
+  const [myId, setMyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [topUpAmount, setTopUpAmount] = useState(100);
   const [showTopUp, setShowTopUp] = useState(false);
@@ -22,16 +26,20 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
 
   async function load() {
     try {
-      const [roomData, scoreData, taskData, settlementData] = await Promise.all([
+      const [roomData, scoreData, taskData, settlementData, topUpData, me] = await Promise.all([
         apiFetch<{ room: RoomDTO }>(`/api/rooms/${roomId}`),
         apiFetch<ScoresDTO>(`/api/rooms/${roomId}/scores`),
         apiFetch<{ tasks: TaskTemplateDTO[] }>(`/api/rooms/${roomId}/tasks`),
         apiFetch<{ settlements: SettlementRecordDTO[] }>(`/api/rooms/${roomId}/settlements`),
+        apiFetch<{ topUps: TopUpDTO[] }>(`/api/rooms/${roomId}/topup`),
+        apiFetch<MeResponse>("/api/auth/me"),
       ]);
       setRoom(roomData.room);
       setScores(scoreData);
       setTasks(taskData.tasks.filter((t) => t.status === "active").slice(0, 5));
       setSettlements(settlementData.settlements);
+      setTopUps(topUpData.topUps);
+      setMyId(me.member?.id ?? null);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "載入失敗");
     }
@@ -55,6 +63,19 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
       load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "加碼失敗");
+    }
+  }
+
+  async function handleDeleteTopUp(topUpId: number) {
+    if (!confirm("確定要撤銷這筆加碼嗎？")) return;
+    try {
+      await apiFetch(`/api/rooms/${roomId}/topup`, {
+        method: "DELETE",
+        body: JSON.stringify({ topUpId }),
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "撤銷失敗");
     }
   }
 
@@ -120,6 +141,27 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
             <button onClick={handleTopUp} className="rounded-lg bg-emerald-600 px-4 py-2 text-white">
               確認加碼
             </button>
+          </div>
+        )}
+
+        {topUps.length > 0 && (
+          <div className="mt-3 space-y-1">
+            <div className="text-xs text-slate-400">本期加碼紀錄</div>
+            {topUps.map((t) => (
+              <div key={t.id} className="flex items-center justify-between text-sm text-slate-600">
+                <span>
+                  {t.addedByNickname} +{t.amount} 元
+                </span>
+                {t.addedById === myId && (
+                  <button
+                    onClick={() => handleDeleteTopUp(t.id)}
+                    className="text-xs text-red-500 underline hover:text-red-700"
+                  >
+                    打錯了，撤銷
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         )}
 

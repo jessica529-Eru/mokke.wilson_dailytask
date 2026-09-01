@@ -6,7 +6,17 @@ import { ApiError, handleApiError } from "@/lib/api";
 import { computeResponseDeadline } from "@/lib/taskLifecycle";
 import { notify } from "@/lib/notify";
 
-const bodySchema = z.object({ points: z.number().int().min(0).max(1000) });
+const bodySchema = z
+  .object({
+    points: z.number().int().min(0).max(1000).optional(),
+    // Lets the next completion grant an existing reward-library item
+    // instead of (or alongside) a points override — previously this only
+    // supported changing the point value.
+    rewardId: z.number().int().optional(),
+  })
+  .refine((v) => v.points !== undefined || v.rewardId !== undefined, {
+    message: "請至少變更點數或選擇一個獎勵",
+  });
 
 // Section 10.8: only applies to the next completion of an in-progress
 // extra_quota task — past completions and the template's default stay
@@ -36,6 +46,13 @@ export async function POST(
     const partner = await getPartner(roomId, member.id);
     if (!partner) throw new ApiError(409, "尚未有搭檔");
 
+    if (body.rewardId !== undefined) {
+      const reward = await db.reward.findUnique({ where: { id: body.rewardId } });
+      if (!reward || reward.roomId !== roomId || reward.type === "produced_content") {
+        throw new ApiError(404, "找不到要指定的獎勵");
+      }
+    }
+
     const room = await db.room.findUniqueOrThrow({ where: { id: roomId } });
 
     const request = await db.taskApprovalRequest.create({
@@ -44,7 +61,7 @@ export async function POST(
         taskTemplateId: task.id,
         requestType: "change_quota_reward",
         requestedById: member.id,
-        payload: JSON.stringify({ points: body.points }),
+        payload: JSON.stringify({ points: body.points, rewardId: body.rewardId }),
         status: "pending",
         responseDeadline: computeResponseDeadline(room.defaultReviewDays),
       },

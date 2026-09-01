@@ -57,6 +57,14 @@ export type RoomDTO = {
   currentMoneyPool: number;
 };
 
+export type TopUpDTO = {
+  id: number;
+  amount: number;
+  addedById: number;
+  addedByNickname: string;
+  createdAt: string;
+};
+
 export type ScoreMemberDTO = {
   id: number;
   displayNickname: string;

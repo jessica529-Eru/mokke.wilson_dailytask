@@ -16,13 +16,18 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "已封存",
 };
 
-const TYPE_LABEL: Record<TaskType, string> = {
+// Collapsible sections group by daily vs. extra only — extra_normal and
+// extra_quota still behave differently (the row itself shows the quota
+// count), but they don't need separate headers/labels for that.
+type SectionKey = "daily" | "extra";
+const SECTION_LABEL: Record<SectionKey, string> = {
   daily: "日常任務",
-  extra_normal: "單次額外任務",
-  extra_quota: "額度任務",
+  extra: "額外任務",
 };
-
-const TYPE_ORDER: TaskType[] = ["daily", "extra_normal", "extra_quota"];
+const SECTION_ORDER: SectionKey[] = ["daily", "extra"];
+function sectionKeyFor(type: TaskType): SectionKey {
+  return type === "daily" ? "daily" : "extra";
+}
 
 type MeResponse = { member: { id: number } | null };
 
@@ -38,7 +43,13 @@ function resolveScopeDisplay(
   members: MemberDTO[]
 ): { label: string; colors: string[] } {
   if (task.assignScope === "both") {
-    return { label: "雙方各自", colors: members.map((m) => m.color) };
+    // Both members complete their own instance of this task, so from the
+    // current viewer's perspective it's still "mine" — showing every
+    // member's color here just produced a multi-colored header for no
+    // reason. Only a task exclusively belonging to the partner should
+    // read as a different color.
+    const me = members.find((m) => m.id === myId);
+    return { label: "雙方各自", colors: me ? [me.color] : [] };
   }
   const assignedMember = task.assignedToId ? members.find((m) => m.id === task.assignedToId) : undefined;
   if (task.assignedToId !== null && task.assignedToId === myId) {
@@ -106,8 +117,8 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
     return true;
   });
 
-  const tasksByType: Record<TaskType, TaskTemplateDTO[]> = { daily: [], extra_normal: [], extra_quota: [] };
-  for (const t of visibleTasks) tasksByType[t.type].push(t);
+  const tasksBySection: Record<SectionKey, TaskTemplateDTO[]> = { daily: [], extra: [] };
+  for (const t of visibleTasks) tasksBySection[sectionKeyFor(t.type)].push(t);
 
   const myDailyTasks = tasks.filter(
     (t) => t.type === "daily" && (t.assignScope === "both" || t.assignedToId === myId)
@@ -167,12 +178,13 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
         </div>
       )}
 
-      {TYPE_ORDER.map((type) => (
+      {SECTION_ORDER.map((section) => (
         <TaskSection
-          key={type}
-          type={type}
-          tasks={tasksByType[type]}
+          key={section}
+          label={SECTION_LABEL[section]}
+          tasks={tasksBySection[section]}
           allTasks={tasks}
+          rewards={rewards}
           roomId={roomId}
           myId={myId}
           members={members}
@@ -184,17 +196,19 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
 }
 
 function TaskSection({
-  type,
+  label,
   tasks,
   allTasks,
+  rewards,
   roomId,
   myId,
   members,
   onChanged,
 }: {
-  type: TaskType;
+  label: string;
   tasks: TaskTemplateDTO[];
   allTasks: TaskTemplateDTO[];
+  rewards: RewardDTO[];
   roomId: number;
   myId: number | null;
   members: MemberDTO[];
@@ -213,7 +227,7 @@ function TaskSection({
         className="flex w-full items-center justify-between rounded-lg bg-slate-100 px-3 py-2 text-left text-sm font-semibold text-slate-700"
       >
         <span>
-          {TYPE_LABEL[type]} <span className="font-normal text-slate-400">（{tasks.length}）</span>
+          {label} <span className="font-normal text-slate-400">（{tasks.length}）</span>
         </span>
         <span className="text-slate-400">{open ? "收合 ▲" : "展開 ▼"}</span>
       </button>
@@ -227,6 +241,7 @@ function TaskSection({
               myId={myId}
               members={members}
               allTasks={allTasks}
+              rewards={rewards}
               onChanged={onChanged}
             />
           ))}
@@ -374,6 +389,7 @@ function TaskRow({
   myId,
   members,
   allTasks,
+  rewards,
   onChanged,
 }: {
   task: TaskTemplateDTO;
@@ -381,6 +397,7 @@ function TaskRow({
   myId: number | null;
   members: MemberDTO[];
   allTasks: TaskTemplateDTO[];
+  rewards: RewardDTO[];
   onChanged: () => void;
 }) {
   const [completing, setCompleting] = useState(false);
@@ -392,6 +409,7 @@ function TaskRow({
   const [unlockCondition, setUnlockCondition] = useState<UnlockCondition | undefined>(undefined);
   const [changingQuotaReward, setChangingQuotaReward] = useState(false);
   const [nextQuotaPoints, setNextQuotaPoints] = useState(task.points ?? 0);
+  const [nextQuotaRewardId, setNextQuotaRewardId] = useState<number | "">("");
 
   const canComplete =
     task.status === "active" && (task.assignScope === "both" || task.assignedToId === myId);
@@ -439,9 +457,13 @@ function TaskRow({
     try {
       await apiFetch(`/api/rooms/${roomId}/tasks/${task.id}/quota-reward-change`, {
         method: "POST",
-        body: JSON.stringify({ points: nextQuotaPoints }),
+        body: JSON.stringify({
+          points: nextQuotaPoints,
+          rewardId: nextQuotaRewardId === "" ? undefined : nextQuotaRewardId,
+        }),
       });
       setChangingQuotaReward(false);
+      setNextQuotaRewardId("");
       onChanged();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "操作失敗");
@@ -525,7 +547,7 @@ function TaskRow({
               </div>
             </div>
           ) : changingQuotaReward ? (
-            <div className="flex items-center gap-2">
+            <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm text-slate-600">
                 下一次完成改成
                 <input
@@ -538,12 +560,35 @@ function TaskRow({
                 />
                 點
               </label>
-              <button onClick={() => setChangingQuotaReward(false)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
-                取消
-              </button>
-              <button onClick={submitQuotaRewardChange} className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm text-white">
-                確認
-              </button>
+              {rewards.length > 0 && (
+                <label className="flex items-center gap-2 text-sm text-slate-600">
+                  同時解鎖獎勵（選填）
+                  <select
+                    className="rounded-lg border border-slate-300 px-2 py-1"
+                    value={nextQuotaRewardId}
+                    onChange={(e) => setNextQuotaRewardId(e.target.value === "" ? "" : Number(e.target.value))}
+                  >
+                    <option value="">不指定</option>
+                    {rewards.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <p className="text-xs text-slate-400">此變更僅套用於下一次完成，需要對方同意才會生效。</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setChangingQuotaReward(false)}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                >
+                  取消
+                </button>
+                <button onClick={submitQuotaRewardChange} className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm text-white">
+                  確認
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex gap-2">
@@ -562,6 +607,7 @@ function TaskRow({
                 <button
                   onClick={() => {
                     setNextQuotaPoints(task.points ?? 0);
+                    setNextQuotaRewardId("");
                     setChangingQuotaReward(true);
                   }}
                   className="rounded-lg border border-amber-200 px-3 py-1.5 text-sm text-amber-700"
