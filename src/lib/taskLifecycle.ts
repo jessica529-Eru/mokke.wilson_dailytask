@@ -121,15 +121,20 @@ export async function recomputeAnyDailyStreak(
 
 /**
  * Section 6.1: when a proof-requiring task is completed with photo/text
- * content, it auto-produces a "stamp" Reward. The producer can always see
- * their own stamp on their calendar; visibility for the partner is gated by
- * RewardUnlock elsewhere (section 10.9).
+ * content, it auto-produces a "stamp" Reward. This is proof meant for the
+ * partner to see, not a secret the producer has to remember to unlock for
+ * them — so the partner is granted a RewardUnlock at the same time as the
+ * producer, not on a separate manual "share" step (that manual endpoint,
+ * POST /api/rooms/[id]/rewards/share, still exists as a fallback for
+ * stamps created before this — it's just a no-op once both sides already
+ * have an unlock).
  */
 export async function createProducedStamp(
   tx: Prisma.TransactionClient,
   params: {
     roomId: number;
     roomMemberId: number;
+    partnerId?: number | null;
     taskTitle: string;
     proofText?: string;
     proofImageUrls?: string[];
@@ -148,6 +153,11 @@ export async function createProducedStamp(
   await tx.rewardUnlock.create({
     data: { rewardId: reward.id, roomMemberId: params.roomMemberId },
   });
+  if (params.partnerId) {
+    await tx.rewardUnlock.create({
+      data: { rewardId: reward.id, roomMemberId: params.partnerId },
+    });
+  }
   return reward;
 }
 

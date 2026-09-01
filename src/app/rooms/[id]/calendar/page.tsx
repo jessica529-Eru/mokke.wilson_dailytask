@@ -215,10 +215,13 @@ function StampDetailModal({
           <div className="space-y-3">
             {stamp.contentText && <p className="whitespace-pre-wrap text-sm text-slate-700">{stamp.contentText}</p>}
             {stamp.contentImageUrls && stamp.contentImageUrls.length > 0 && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
                 {stamp.contentImageUrls.map((url, i) => (
+                  // Full, uncropped image — object-cover in a fixed-ratio
+                  // box was cutting off parts of the photo, which is
+                  // exactly what "open and see the whole thing" shouldn't do.
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img key={i} src={url} alt="" className="aspect-square w-full rounded-lg object-cover" />
+                  <img key={i} src={url} alt="" className="w-full rounded-lg object-contain" />
                 ))}
               </div>
             )}
