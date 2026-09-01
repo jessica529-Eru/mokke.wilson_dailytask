@@ -39,6 +39,38 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/task
       );
     }
 
+    // Which reward(s) does completing this task unlock? Read from the
+    // condition's own taskId/taskIds — not the RewardAssignment.taskTemplateId
+    // column, which only the task-creation "綁定獎勵庫" flow ever sets — so
+    // this also covers a single_task condition set up from the reward
+    // library form directly. Was previously computed nowhere, so a task's
+    // own row never showed it had a reward attached (only points did).
+    const assignments = await db.rewardAssignment.findMany({
+      where: { reward: { roomId, type: { not: "produced_content" } } },
+      include: { reward: true },
+    });
+    const boundRewardsByTaskId = new Map<number, { id: number; title: string }[]>();
+    for (const a of assignments) {
+      let taskIds: number[] = [];
+      try {
+        const value = JSON.parse(a.unlockConditionValue) as { taskId?: number; taskIds?: number[] };
+        if (a.unlockConditionType === "single_task" && typeof value.taskId === "number") {
+          taskIds = [value.taskId];
+        } else if (a.unlockConditionType === "multi_task_threshold" && Array.isArray(value.taskIds)) {
+          taskIds = value.taskIds;
+        }
+      } catch {
+        // Malformed unlockConditionValue shouldn't happen (we control every
+        // writer), but a task simply not showing a bound reward is a much
+        // safer failure mode here than a 500 on the whole task list.
+      }
+      for (const taskId of taskIds) {
+        const list = boundRewardsByTaskId.get(taskId) ?? [];
+        list.push({ id: a.reward.id, title: a.reward.title });
+        boundRewardsByTaskId.set(taskId, list);
+      }
+    }
+
     return NextResponse.json({
       tasks: tasks.map((t) => ({
         id: t.id,
@@ -61,6 +93,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/task
           ? { id: t.stampIconAsset.id, name: t.stampIconAsset.name, frames: JSON.parse(t.stampIconAsset.frameImageUrls) }
           : null,
         completedToday: t.type === "daily" ? completedTodayIds.has(t.id) : undefined,
+        boundRewards: boundRewardsByTaskId.get(t.id) ?? [],
         createdAt: t.createdAt,
       })),
     });

@@ -487,6 +487,11 @@ function TaskRow({
               {task.type === "extra_quota" && ` · 額度 ${task.quotaUsed}/${task.quotaTotal}`}
               {task.isSystemGenerated && " · 🎁 驚喜任務"}
             </div>
+            {task.boundRewards.length > 0 && (
+              <div className="mt-0.5 text-xs text-amber-600">
+                🎁 完成後解鎖：{task.boundRewards.map((r) => r.title).join("、")}
+              </div>
+            )}
           </div>
         </div>
         <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">

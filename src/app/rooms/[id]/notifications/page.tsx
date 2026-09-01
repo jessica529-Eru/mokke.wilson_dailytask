@@ -3,22 +3,8 @@
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
+import { NOTIFICATION_LABEL } from "@/lib/notificationLabels";
 import type { NotificationDTO } from "@/lib/types";
-
-const TYPE_LABEL: Record<string, string> = {
-  approval_pending: "有待審核項目",
-  approval_deadline_soon: "審核期限將至",
-  daily_task_reminder: "日常任務提醒",
-  task_rejected: "任務被拒絕",
-  task_approved: "任務已核准",
-  reward_unlocked: "獎勵已解鎖",
-  settlement_upcoming: "即將結算",
-  streak_breaking_soon: "連續天數即將中斷",
-  money_topped_up: "獎金池已加碼",
-  surprise_task_triggered: "觸發了驚喜任務",
-  room_draft_revision_requested: "契約有新的修改",
-  room_draft_approved: "契約已成立",
-};
 
 const ENTITY_LINK: Record<string, (roomId: number) => string> = {
   TaskTemplate: (roomId) => `/rooms/${roomId}/tasks`,
@@ -73,7 +59,7 @@ export default function NotificationsPage({ params }: { params: Promise<{ id: st
               }`}
             >
               <div className="flex items-center justify-between">
-                <span>{TYPE_LABEL[n.type] ?? n.type}</span>
+                <span>{NOTIFICATION_LABEL[n.type as keyof typeof NOTIFICATION_LABEL] ?? n.type}</span>
                 <span className="text-xs text-slate-400">{new Date(n.createdAt).toLocaleString()}</span>
               </div>
             </div>

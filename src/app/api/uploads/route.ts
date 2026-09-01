@@ -8,8 +8,19 @@ import { saveUploadedImage, UploadError } from "@/lib/uploads";
 // server-side, and this app is invite-code-gated rather than public-facing,
 // which keeps the exposure of an open upload endpoint acceptable here.
 export async function POST(req: NextRequest) {
+  let form: FormData;
   try {
-    const form = await req.formData();
+    form = await req.formData();
+  } catch (err) {
+    // A failure here (truncated upload on a flaky mobile connection,
+    // malformed multipart body) was falling into the generic 500 path
+    // with no distinguishing detail — this is a different failure mode
+    // from a storage/fs problem, so log and message it separately.
+    console.error("[uploads] failed to parse multipart form data:", err);
+    return handleApiError(new ApiError(400, "上傳中斷，請重新選擇檔案再試一次"));
+  }
+
+  try {
     const file = form.get("file");
     if (!(file instanceof File)) {
       throw new ApiError(400, "缺少檔案");

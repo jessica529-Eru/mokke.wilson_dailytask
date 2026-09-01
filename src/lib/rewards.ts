@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { db } from "@/lib/db";
 import { notify } from "@/lib/notify";
 
 /**
@@ -16,6 +17,7 @@ export async function checkRewardUnlocks(
   });
 
   const unlockedRewardIds: number[] = [];
+  const exhaustedRewardIds: number[] = [];
 
   for (const assignment of assignments) {
     const reward = assignment.reward;
@@ -33,15 +35,16 @@ export async function checkRewardUnlocks(
       data: { rewardId: reward.id, roomMemberId: params.roomMemberId },
     });
     if (reward.stockTotal !== null) {
-      await tx.reward.update({
+      const updated = await tx.reward.update({
         where: { id: reward.id },
         data: { stockRemaining: { decrement: 1 } },
       });
+      if ((updated.stockRemaining ?? 0) <= 0) exhaustedRewardIds.push(reward.id);
     }
     unlockedRewardIds.push(reward.id);
   }
 
-  return unlockedRewardIds;
+  return { unlockedRewardIds, exhaustedRewardIds };
 }
 
 async function isConditionMet(
@@ -97,6 +100,28 @@ export async function notifyRewardUnlocks(roomId: number, roomMemberId: number, 
   await Promise.all(
     rewardIds.map((rewardId) =>
       notify({ roomId, roomMemberId, type: "reward_unlocked", relatedEntityType: "Reward", relatedEntityId: rewardId })
+    )
+  );
+}
+
+// Stock is shared across the room (not per-member), so both members need
+// to know the moment it runs out — otherwise whoever didn't grab it has
+// no way to find out it's gone until they notice the greyed-out card.
+// Called post-transaction, like notifyRewardUnlocks.
+export async function notifyRewardStockExhausted(roomId: number, rewardIds: number[]) {
+  if (rewardIds.length === 0) return;
+  const members = await db.roomMember.findMany({ where: { roomId }, select: { id: true } });
+  await Promise.all(
+    members.flatMap((m) =>
+      rewardIds.map((rewardId) =>
+        notify({
+          roomId,
+          roomMemberId: m.id,
+          type: "reward_stock_exhausted",
+          relatedEntityType: "Reward",
+          relatedEntityId: rewardId,
+        })
+      )
     )
   );
 }

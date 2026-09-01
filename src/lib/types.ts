@@ -101,6 +101,7 @@ export type TaskTemplateDTO = {
   isSystemGenerated: boolean;
   stampIcon: { id: number; name: string; frames: string[] } | null;
   completedToday?: boolean;
+  boundRewards: { id: number; title: string }[];
   createdAt: string;
 };
 
@@ -145,6 +146,7 @@ export type RewardDTO = {
   stockRemaining: number | null;
   createdById: number;
   unlocked: boolean;
+  redeemedAt: string | null;
   createdAt: string;
 };
 

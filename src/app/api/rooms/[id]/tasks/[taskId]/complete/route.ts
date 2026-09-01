@@ -4,7 +4,7 @@ import { requireRoomMember, getPartner } from "@/lib/currentMember";
 import { ApiError, handleApiError } from "@/lib/api";
 import { completeTaskSchema } from "@/lib/taskInput";
 import { localDateInTimezone, bumpStreak, createProducedStamp, maybeTriggerSurpriseTask } from "@/lib/taskLifecycle";
-import { checkRewardUnlocks, notifyRewardUnlocks } from "@/lib/rewards";
+import { checkRewardUnlocks, notifyRewardUnlocks, notifyRewardStockExhausted } from "@/lib/rewards";
 import { notify } from "@/lib/notify";
 
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/tasks/[taskId]/complete">) {
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
 
     const partner = await getPartner(roomId, member.id);
 
-    const { completion, stampReward, surpriseTask, unlockedRewardIds } = await db.$transaction(async (tx) => {
+    const { completion, stampReward, surpriseTask, unlockedRewardIds, exhaustedRewardIds } = await db.$transaction(async (tx) => {
       const completion = await tx.taskCompletion.create({
         data: {
           taskTemplateId: task.id,
@@ -127,7 +127,10 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
         });
       }
 
-      const unlockedRewardIds = await checkRewardUnlocks(tx, { roomId, roomMemberId: member.id });
+      const { unlockedRewardIds, exhaustedRewardIds } = await checkRewardUnlocks(tx, {
+        roomId,
+        roomMemberId: member.id,
+      });
 
       // A quota-reward-change override can grant a specific reward-library
       // item directly for this one completion, separate from any
@@ -143,22 +146,24 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
               data: { rewardId: overrideRewardId, roomMemberId: member.id },
             });
             if (reward.stockTotal !== null) {
-              await tx.reward.update({
+              const updated = await tx.reward.update({
                 where: { id: overrideRewardId },
                 data: { stockRemaining: { decrement: 1 } },
               });
+              if ((updated.stockRemaining ?? 0) <= 0) exhaustedRewardIds.push(overrideRewardId);
             }
             unlockedRewardIds.push(overrideRewardId);
           }
         }
       }
 
-      return { completion, stampReward, surpriseTask, unlockedRewardIds };
+      return { completion, stampReward, surpriseTask, unlockedRewardIds, exhaustedRewardIds };
     });
 
     if (unlockedRewardIds.length > 0) {
       await notifyRewardUnlocks(roomId, member.id, unlockedRewardIds);
     }
+    await notifyRewardStockExhausted(roomId, exhaustedRewardIds);
 
     if (partner && surpriseTask) {
       await Promise.all([

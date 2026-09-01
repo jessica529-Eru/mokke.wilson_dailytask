@@ -1,5 +1,6 @@
 import webpush from "web-push";
 import { db } from "@/lib/db";
+import { NOTIFICATION_LABEL } from "@/lib/notificationLabels";
 import type { $Enums } from "@/generated/prisma/client";
 
 let configured = false;
@@ -14,21 +15,6 @@ function ensureConfigured() {
   configured = true;
   return true;
 }
-
-const NOTIFICATION_TITLE: Record<$Enums.NotificationType, string> = {
-  approval_pending: "有待審核項目",
-  approval_deadline_soon: "審核期限將至",
-  daily_task_reminder: "日常任務提醒",
-  task_rejected: "任務被拒絕",
-  task_approved: "任務已核准",
-  reward_unlocked: "獎勵已解鎖",
-  settlement_upcoming: "即將結算",
-  streak_breaking_soon: "連續天數即將中斷",
-  money_topped_up: "獎金池已加碼",
-  surprise_task_triggered: "觸發了驚喜任務",
-  room_draft_revision_requested: "契約有新的修改",
-  room_draft_approved: "契約已成立",
-};
 
 /**
  * Best-effort push delivery for a Notification row that was already
@@ -50,7 +36,7 @@ export async function sendPushForNotification(params: {
   if (subscriptions.length === 0) return;
 
   const payload = JSON.stringify({
-    title: NOTIFICATION_TITLE[params.type] ?? "有新通知",
+    title: NOTIFICATION_LABEL[params.type] ?? "有新通知",
     url: `/rooms/${params.roomId}/notifications`,
   });
 

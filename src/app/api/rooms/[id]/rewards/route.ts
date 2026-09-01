@@ -44,6 +44,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/rewa
         stockRemaining: r.stockRemaining,
         createdById: r.createdById,
         unlocked: r.unlocks.length > 0,
+        redeemedAt: r.unlocks[0]?.redeemedAt ?? null,
         contentText: r.unlocks.length > 0 ? r.contentText : null,
         contentImageUrls: r.unlocks.length > 0 && r.contentImageUrls ? JSON.parse(r.contentImageUrls) : null,
         createdAt: r.createdAt,

@@ -2,7 +2,8 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
-import type { CalendarDayDTO, CalendarDTO, MemberDTO } from "@/lib/types";
+import { ConditionPicker, type UnlockCondition } from "@/components/ConditionPicker";
+import type { CalendarDayDTO, CalendarDTO, MemberDTO, TaskTemplateDTO } from "@/lib/types";
 
 function currentMonth() {
   return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit" })
@@ -24,18 +25,21 @@ export default function CalendarPage({ params }: { params: Promise<{ id: string 
   const [viewMemberId, setViewMemberId] = useState<number | null>(null);
   const [month, setMonth] = useState(currentMonth());
   const [calendar, setCalendar] = useState<CalendarDTO | null>(null);
+  const [tasks, setTasks] = useState<TaskTemplateDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<CalendarDayDTO | null>(null);
 
   async function loadMembers() {
     try {
-      const [roomData, me] = await Promise.all([
+      const [roomData, me, taskData] = await Promise.all([
         apiFetch<{ members: MemberDTO[] }>(`/api/rooms/${roomId}`),
         apiFetch<{ member: { id: number } | null }>("/api/auth/me"),
+        apiFetch<{ tasks: TaskTemplateDTO[] }>(`/api/rooms/${roomId}/tasks`),
       ]);
       setMembers(roomData.members);
       setMyId(me.member?.id ?? null);
       setViewMemberId(me.member?.id ?? roomData.members[0]?.id ?? null);
+      setTasks(taskData.tasks);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "載入失敗");
     }
@@ -153,7 +157,13 @@ export default function CalendarPage({ params }: { params: Promise<{ id: string 
         <StampDetailModal
           stamp={selectedDay.producedStamp}
           isOwner={viewMemberId === myId}
+          roomId={roomId}
+          tasks={tasks}
           onClose={() => setSelectedDay(null)}
+          onConditionSet={() => {
+            setSelectedDay(null);
+            loadCalendar();
+          }}
         />
       )}
     </div>
@@ -163,12 +173,39 @@ export default function CalendarPage({ params }: { params: Promise<{ id: string 
 function StampDetailModal({
   stamp,
   isOwner,
+  roomId,
+  tasks,
   onClose,
+  onConditionSet,
 }: {
   stamp: NonNullable<CalendarDayDTO["producedStamp"]>;
   isOwner: boolean;
+  roomId: number;
+  tasks: TaskTemplateDTO[];
   onClose: () => void;
+  onConditionSet: () => void;
 }) {
+  const [settingCondition, setSettingCondition] = useState(false);
+  const [condition, setCondition] = useState<UnlockCondition | undefined>(undefined);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submitCondition() {
+    if (!condition) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/rooms/${roomId}/rewards/assignment`, {
+        method: "POST",
+        body: JSON.stringify({ rewardId: stamp.rewardId, ...condition }),
+      });
+      onConditionSet();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "設定失敗");
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
@@ -205,10 +242,38 @@ function StampDetailModal({
         )}
 
         {isOwner && stamp.unlocked && (
-          <div className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
-            {stamp.hasUnlockCondition
-              ? "對方需要達成你設定的解鎖條件才能看到這則內容。"
-              : "沒有設定解鎖條件，對方永遠看不到這則內容。"}
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            {stamp.hasUnlockCondition ? (
+              <p className="text-xs text-slate-500">對方需要達成你設定的解鎖條件才能看到這則內容。</p>
+            ) : settingCondition ? (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">完成任務當下忘了設定也沒關係，這裡可以補設定。</p>
+                <ConditionPicker tasks={tasks} onChange={setCondition} />
+                {error && <p className="text-xs text-red-600">{error}</p>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSettingCondition(false)}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={submitCondition}
+                    disabled={!condition || submitting}
+                    className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                  >
+                    {submitting ? "設定中…" : "確認設定"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500">沒有設定解鎖條件，對方永遠看不到這則內容。</p>
+                <button onClick={() => setSettingCondition(true)} className="shrink-0 text-xs text-slate-700 underline">
+                  補設定解鎖條件
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

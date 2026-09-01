@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireRoomMember } from "@/lib/currentMember";
 import { ApiError, handleApiError } from "@/lib/api";
 import { localDateInTimezone, recomputeAnyDailyStreak } from "@/lib/taskLifecycle";
+import { notifyRewardStockExhausted } from "@/lib/rewards";
 
 const bodySchema = z.object({
   rewardId: z.number().int(),
@@ -49,15 +50,24 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
       throw new ApiError(400, "回補日期需在最近 14 天內");
     }
 
-    await db.$transaction(async (tx) => {
+    const { exhausted } = await db.$transaction(async (tx) => {
       await tx.rescueVoucherUsage.create({
         data: { roomMemberId: member.id, rewardId: reward.id, makeupForDate: body.makeupForDate },
       });
+      let exhausted = false;
       if (reward.stockTotal !== null) {
-        await tx.reward.update({ where: { id: reward.id }, data: { stockRemaining: { decrement: 1 } } });
+        const updated = await tx.reward.update({
+          where: { id: reward.id },
+          data: { stockRemaining: { decrement: 1 } },
+        });
+        exhausted = (updated.stockRemaining ?? 0) <= 0;
       }
       await recomputeAnyDailyStreak(tx, { roomId, roomMemberId: member.id });
+      return { exhausted };
     });
+    if (exhausted) {
+      await notifyRewardStockExhausted(roomId, [reward.id]);
+    }
 
     const streak = await db.streakRecord.findUnique({
       where: {

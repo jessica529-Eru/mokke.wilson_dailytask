@@ -35,6 +35,7 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
   const [showForm, setShowForm] = useState(false);
   const [redeemingRewardId, setRedeemingRewardId] = useState<number | null>(null);
   const [makeupDate, setMakeupDate] = useState("");
+  const [showOnlyMine, setShowOnlyMine] = useState(false);
 
   async function load() {
     try {
@@ -75,6 +76,18 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
       load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "使用失敗");
+    }
+  }
+
+  async function markRedeemed(rewardId: number) {
+    try {
+      await apiFetch(`/api/rooms/${roomId}/rewards/redeem`, {
+        method: "POST",
+        body: JSON.stringify({ rewardId }),
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "標記失敗");
     }
   }
 
@@ -132,9 +145,18 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
         />
       )}
 
+      <label className="flex items-center gap-1.5 text-xs text-slate-500">
+        <input type="checkbox" checked={showOnlyMine} onChange={(e) => setShowOnlyMine(e.target.checked)} />
+        只顯示我的獎勵（我已解鎖的）
+      </label>
+
       <ul className="space-y-3">
-        {rewards.map((r) => {
+        {rewards
+          .filter((r) => !showOnlyMine || r.unlocked)
+          .map((r) => {
           const creatorColor = colorByMemberId.get(r.createdById);
+          const stockExhausted = r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0;
+          const canRedeem = r.type === "fixed_item" || r.type === "other";
           return (
             <li
               key={r.id}
@@ -147,6 +169,7 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
                   <span className="ml-2 text-xs text-slate-400">
                     {TYPE_LABEL[r.type] ?? r.type}
                     {r.stockTotal !== null && ` · 庫存 ${r.stockRemaining}/${r.stockTotal}`}
+                    {stockExhausted && <span className="ml-1 text-red-500">· 🚫 庫存已用完</span>}
                   </span>
                 </div>
                 {r.type === "rescue_voucher" ? (
@@ -164,6 +187,19 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
                     <span className="text-xs text-slate-400" title="只有達成解鎖條件的本人才能使用">
                       🔒 尚未解鎖
                     </span>
+                  )
+                ) : r.unlocked && canRedeem ? (
+                  r.redeemedAt ? (
+                    <span className="text-xs text-emerald-600" title={new Date(r.redeemedAt).toLocaleString()}>
+                      ✅ 已兌換
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => markRedeemed(r.id)}
+                      className="rounded-lg border border-emerald-300 px-3 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
+                    >
+                      標記已兌換
+                    </button>
                   )
                 ) : (
                   <span className={`text-xs ${r.unlocked ? "text-emerald-600" : "text-slate-400"}`}>
@@ -212,6 +248,9 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
           );
         })}
         {rewards.length === 0 && <p className="text-sm text-slate-400">目前沒有獎勵</p>}
+        {rewards.length > 0 && showOnlyMine && rewards.every((r) => !r.unlocked) && (
+          <p className="text-sm text-slate-400">你目前還沒有解鎖任何獎勵。</p>
+        )}
       </ul>
     </div>
   );
