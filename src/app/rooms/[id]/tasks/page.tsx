@@ -109,6 +109,11 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
   const tasksByType: Record<TaskType, TaskTemplateDTO[]> = { daily: [], extra_normal: [], extra_quota: [] };
   for (const t of visibleTasks) tasksByType[t.type].push(t);
 
+  const myDailyTasks = tasks.filter(
+    (t) => t.type === "daily" && (t.assignScope === "both" || t.assignedToId === myId)
+  );
+  const allDailyDoneToday = myDailyTasks.length > 0 && myDailyTasks.every((t) => t.completedToday);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -155,6 +160,11 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
       {tasks.length === 0 && <p className="text-sm text-slate-400">目前沒有任務</p>}
       {tasks.length > 0 && visibleTasks.length === 0 && (
         <p className="text-sm text-slate-400">目前沒有符合篩選條件的任務，可以打開上面的篩選項查看。</p>
+      )}
+      {allDailyDoneToday && (
+        <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-700">
+          🎉 今日日常任務已全部完成！
+        </div>
       )}
 
       {TYPE_ORDER.map((type) => (
@@ -385,6 +395,7 @@ function TaskRow({
 
   const canComplete =
     task.status === "active" && (task.assignScope === "both" || task.assignedToId === myId);
+  const alreadyDoneToday = task.type === "daily" && task.completedToday === true;
 
   const scope = resolveScopeDisplay(task, myId, members);
   const borderColor = scope.colors[0] ?? "#cbd5e1";
@@ -439,9 +450,14 @@ function TaskRow({
 
   return (
     <li
-      className="rounded-xl border border-slate-200 bg-white p-4 border-l-4"
+      className="relative rounded-xl border border-slate-200 bg-white p-4 border-l-4"
       style={{ borderLeftColor: borderColor }}
     >
+      {alreadyDoneToday && (
+        <span className="absolute -right-2 -top-2 rotate-[-10deg] rounded border-2 border-red-500 bg-white px-2 py-0.5 text-[10px] font-bold text-red-500 shadow-sm">
+          今日已完成
+        </span>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           {task.stampIcon && (
@@ -531,12 +547,14 @@ function TaskRow({
             </div>
           ) : (
             <div className="flex gap-2">
-              <button
-                onClick={() => (task.requiresProof ? setCompleting(true) : complete())}
-                className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm text-white"
-              >
-                完成
-              </button>
+              {!alreadyDoneToday && (
+                <button
+                  onClick={() => (task.requiresProof ? setCompleting(true) : complete())}
+                  className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm text-white"
+                >
+                  完成
+                </button>
+              )}
               <button onClick={requestDelete} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600">
                 提出刪除
               </button>

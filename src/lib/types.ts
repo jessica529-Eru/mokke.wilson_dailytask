@@ -20,6 +20,7 @@ export type DraftContentDTO = {
   roomName: string;
   initialMoneyPool: number;
   settlementDate: string;
+  settlementTimezone: string;
   dailyTasks: TaskDraftItemDTO[];
   extraTasks: TaskDraftItemDTO[];
 };
@@ -91,6 +92,7 @@ export type TaskTemplateDTO = {
   triggerTargetTaskId: number | null;
   isSystemGenerated: boolean;
   stampIcon: { id: number; name: string; frames: string[] } | null;
+  completedToday?: boolean;
   createdAt: string;
 };
 

@@ -4,6 +4,7 @@ import { useEffect, useState, use as usePromise } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { TaskDraftListEditor } from "@/components/TaskDraftListEditor";
+import { TIMEZONE_OPTIONS } from "@/lib/timezones";
 import type {
   DraftContentDTO,
   IconAssetDTO,
@@ -180,6 +181,10 @@ export default function DraftReviewPage({ params }: { params: Promise<{ id: stri
               <dt className="text-slate-500">結算日期</dt>
               <dd className="font-medium">{new Date(latest.content.settlementDate).toLocaleString()}</dd>
             </div>
+            <div>
+              <dt className="text-slate-500">時區</dt>
+              <dd className="font-medium">{latest.content.settlementTimezone}</dd>
+            </div>
           </dl>
 
           <TaskList title="日常任務" items={latest.content.dailyTasks} nameFor={nameFor} />
@@ -219,6 +224,21 @@ export default function DraftReviewPage({ params }: { params: Promise<{ id: stri
               value={toDatetimeLocal(editContent.settlementDate)}
               onChange={(e) => setEditContent({ ...editContent, settlementDate: new Date(e.target.value).toISOString() })}
             />
+            <label className="block text-sm text-slate-600">時區</label>
+            <select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              value={editContent.settlementTimezone}
+              onChange={(e) => setEditContent({ ...editContent, settlementTimezone: e.target.value })}
+            >
+              {!TIMEZONE_OPTIONS.includes(editContent.settlementTimezone) && (
+                <option value={editContent.settlementTimezone}>{editContent.settlementTimezone}</option>
+              )}
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz}
+                </option>
+              ))}
+            </select>
           </div>
 
           <section className="space-y-3">

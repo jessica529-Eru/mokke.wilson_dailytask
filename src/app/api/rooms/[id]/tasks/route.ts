@@ -3,14 +3,14 @@ import { db } from "@/lib/db";
 import { requireRoomMember, getPartner } from "@/lib/currentMember";
 import { ApiError, handleApiError } from "@/lib/api";
 import { createTaskSchema } from "@/lib/taskInput";
-import { computeResponseDeadline } from "@/lib/taskLifecycle";
+import { computeResponseDeadline, localDateInTimezone } from "@/lib/taskLifecycle";
 import { notify } from "@/lib/notify";
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/tasks">) {
   try {
     const { id } = await ctx.params;
     const roomId = Number(id);
-    await requireRoomMember(roomId);
+    const member = await requireRoomMember(roomId);
 
     // Section 10.6: every task, including pending_approval ones, is fully
     // visible to both members — no hidden fields.
@@ -19,6 +19,25 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/task
       orderBy: { createdAt: "desc" },
       include: { stampIconAsset: true },
     });
+
+    // completedToday is viewer-scoped (each member completes their own
+    // instance of a "both" task) and only meaningful for daily tasks —
+    // used to show a persistent "done today" stamp that clears itself the
+    // moment the room's local date rolls over, no manual reset needed.
+    const dailyTaskIds = tasks.filter((t) => t.type === "daily").map((t) => t.id);
+    let completedTodayIds = new Set<number>();
+    if (dailyTaskIds.length > 0) {
+      const room = await db.room.findUniqueOrThrow({ where: { id: roomId } });
+      const today = localDateInTimezone(room.settlementTimezone);
+      completedTodayIds = new Set(
+        (
+          await db.taskCompletion.findMany({
+            where: { taskTemplateId: { in: dailyTaskIds }, roomMemberId: member.id, completedLocalDate: today },
+            select: { taskTemplateId: true },
+          })
+        ).map((c) => c.taskTemplateId)
+      );
+    }
 
     return NextResponse.json({
       tasks: tasks.map((t) => ({
@@ -41,6 +60,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/task
         stampIcon: t.stampIconAsset
           ? { id: t.stampIconAsset.id, name: t.stampIconAsset.name, frames: JSON.parse(t.stampIconAsset.frameImageUrls) }
           : null,
+        completedToday: t.type === "daily" ? completedTodayIds.has(t.id) : undefined,
         createdAt: t.createdAt,
       })),
     });

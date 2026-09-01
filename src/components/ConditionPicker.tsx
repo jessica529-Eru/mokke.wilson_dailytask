@@ -118,6 +118,10 @@ export function ConditionPicker({
               onChange={(e) => update({ threshold: Number(e.target.value) })}
             />
           </label>
+          <p className="text-xs text-slate-400">
+            以上任務加總完成次數達到此數字即可解鎖，不用每項都做、也不用同一項做這麼多次——例如勾 4
+            項、門檻設 3，完成其中任意 3 次（可以是不同任務）就會解鎖。
+          </p>
         </div>
       )}
 

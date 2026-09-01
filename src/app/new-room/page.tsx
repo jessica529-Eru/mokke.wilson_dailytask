@@ -7,6 +7,7 @@ import { ColorPicker } from "@/components/ColorPicker";
 import { MEMBER_COLOR_PALETTE } from "@/lib/colors";
 import { TaskDraftListEditor } from "@/components/TaskDraftListEditor";
 import { ImageUploadField } from "@/components/ImageUploadField";
+import { TIMEZONE_OPTIONS, detectTimezone } from "@/lib/timezones";
 import type { DraftContentDTO, IconAssetDTO, TaskDraftItemDTO } from "@/lib/types";
 
 export default function NewRoomPage() {
@@ -14,6 +15,7 @@ export default function NewRoomPage() {
   const [roomName, setRoomName] = useState("");
   const [initialMoneyPool, setInitialMoneyPool] = useState(1000);
   const [settlementDate, setSettlementDate] = useState("");
+  const [settlementTimezone, setSettlementTimezone] = useState(detectTimezone);
   const [password, setPassword] = useState("");
   const [displayNickname, setDisplayNickname] = useState("");
   const [color, setColor] = useState<string>(MEMBER_COLOR_PALETTE[0].value);
@@ -49,6 +51,7 @@ export default function NewRoomPage() {
         roomName,
         initialMoneyPool,
         settlementDate: new Date(settlementDate).toISOString(),
+        settlementTimezone,
         dailyTasks,
         extraTasks,
       };
@@ -105,6 +108,25 @@ export default function NewRoomPage() {
               onChange={(e) => setSettlementDate(e.target.value)}
               required
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-slate-600">
+              時區（決定「今天」的起訖與每日任務重置時間，預設偵測你目前所在的時區）
+            </label>
+            <select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              value={settlementTimezone}
+              onChange={(e) => setSettlementTimezone(e.target.value)}
+            >
+              {!TIMEZONE_OPTIONS.includes(settlementTimezone) && (
+                <option value={settlementTimezone}>{settlementTimezone}</option>
+              )}
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz}
+                </option>
+              ))}
+            </select>
           </div>
         </section>
 

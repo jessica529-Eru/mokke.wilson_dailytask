@@ -15,6 +15,7 @@ const isPushSupported =
 export function PushNotificationToggle({ roomId }: { roomId: number }) {
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isPushSupported) return;
@@ -33,13 +34,24 @@ export function PushNotificationToggle({ roomId }: { roomId: number }) {
   }, []);
 
   async function subscribe() {
+    setError(null);
+    // NEXT_PUBLIC_VAPID_PUBLIC_KEY is inlined at build time — if the
+    // deploy's build step didn't have it set, this is empty for every
+    // visitor until the app is rebuilt, not something a user can retry
+    // their way out of. Say so instead of quietly doing nothing.
     const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!publicKey) return;
+    if (!publicKey) {
+      setError("推播功能尚未設定完成（缺少金鑰），請聯絡管理員");
+      return;
+    }
 
     setBusy(true);
     try {
       const permission = await Notification.requestPermission();
-      if (permission !== "granted") return;
+      if (permission !== "granted") {
+        setError(permission === "denied" ? "瀏覽器通知權限被拒絕，請至瀏覽器設定開啟後再試一次" : "尚未允許通知權限");
+        return;
+      }
 
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
@@ -48,18 +60,24 @@ export function PushNotificationToggle({ roomId }: { roomId: number }) {
       });
       const json = sub.toJSON();
 
-      await fetch(`/api/rooms/${roomId}/push-subscription`, {
+      const res = await fetch(`/api/rooms/${roomId}/push-subscription`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
       });
+      if (!res.ok) {
+        throw new Error("save subscription failed");
+      }
       setSubscribed(true);
+    } catch {
+      setError("啟用推播失敗，請稍後再試一次");
     } finally {
       setBusy(false);
     }
   }
 
   async function unsubscribe() {
+    setError(null);
     setBusy(true);
     try {
       const reg = await navigator.serviceWorker.ready;
@@ -73,6 +91,8 @@ export function PushNotificationToggle({ roomId }: { roomId: number }) {
         await sub.unsubscribe();
       }
       setSubscribed(false);
+    } catch {
+      setError("關閉推播失敗，請稍後再試一次");
     } finally {
       setBusy(false);
     }
@@ -81,12 +101,19 @@ export function PushNotificationToggle({ roomId }: { roomId: number }) {
   if (!isPushSupported) return null;
 
   return (
-    <button
-      onClick={subscribed ? unsubscribe : subscribe}
-      disabled={busy}
-      className="text-xs text-slate-500 hover:text-slate-900 disabled:opacity-50"
-    >
-      {subscribed ? "🔔 推播已啟用" : "🔕 啟用推播通知"}
-    </button>
+    <div className="relative">
+      <button
+        onClick={subscribed ? unsubscribe : subscribe}
+        disabled={busy}
+        className="text-xs text-slate-500 hover:text-slate-900 disabled:opacity-50"
+      >
+        {subscribed ? "🔔 推播已啟用" : "🔕 啟用推播通知"}
+      </button>
+      {error && (
+        <p className="absolute right-0 top-full z-10 mt-1 w-48 rounded-lg border border-red-200 bg-white p-2 text-xs text-red-600 shadow-sm">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

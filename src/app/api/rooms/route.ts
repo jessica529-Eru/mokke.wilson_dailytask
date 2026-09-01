@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
           status: "draft",
           initialMoneyPool: body.content.initialMoneyPool,
           settlementDate: new Date(body.content.settlementDate),
+          settlementTimezone: body.content.settlementTimezone,
         },
       });
 

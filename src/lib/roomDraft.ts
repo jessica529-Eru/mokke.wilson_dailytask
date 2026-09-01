@@ -34,6 +34,11 @@ export const draftContentSnapshotSchema = z.object({
   // room_settings_change TaskApprovalRequest instead (see settlement-date
   // route and applyApprovalOutcome).
   settlementDate: z.string().datetime(),
+  // IANA zone name (e.g. "Asia/Taipei"). Drives what counts as "today" for
+  // daily-task resets, streaks, and settlement — set once at room creation
+  // like settlementDate; Room.settlementTimezone otherwise silently
+  // defaulted to Asia/Taipei with no way to change it.
+  settlementTimezone: z.string().min(1).max(64).default("Asia/Taipei"),
   dailyTasks: z.array(taskDraftItemSchema).max(50),
   extraTasks: z.array(taskDraftItemSchema).max(50),
 });
