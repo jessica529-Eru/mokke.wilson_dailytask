@@ -58,7 +58,7 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
     }
   }
 
-  async function handleSetSettlementDate() {
+  async function handleRequestSettlementDateChange() {
     if (!settlementInput) return;
     try {
       await apiFetch(`/api/rooms/${roomId}/settlement-date`, {
@@ -66,9 +66,10 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
         body: JSON.stringify({ settlementDate: new Date(settlementInput).toISOString() }),
       });
       setSettlementInput("");
+      alert("已送出結算日變更請求，需對方同意後才會生效");
       load();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "設定失敗");
+      setError(err instanceof ApiClientError ? err.message : "送出失敗");
     }
   }
 
@@ -135,13 +136,10 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="mb-3 font-semibold">結算</h2>
-        {room.settlementDate ? (
-          <p className="text-sm text-slate-600">
-            下次結算：{new Date(room.settlementDate).toLocaleString()}
-          </p>
-        ) : (
-          <p className="text-sm text-slate-400">尚未設定結算日期</p>
-        )}
+        <p className="text-sm text-slate-600">
+          下次結算：{room.settlementDate ? new Date(room.settlementDate).toLocaleString() : "尚未設定"}
+        </p>
+        <p className="mt-1 text-xs text-slate-400">變更結算日需要對方同意，送出後請到審核中心等待回覆。</p>
         <div className="mt-2 flex gap-2">
           <input
             type="datetime-local"
@@ -149,8 +147,11 @@ export default function RoomHomePage({ params }: { params: Promise<{ id: string 
             value={settlementInput}
             onChange={(e) => setSettlementInput(e.target.value)}
           />
-          <button onClick={handleSetSettlementDate} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">
-            設定
+          <button
+            onClick={handleRequestSettlementDateChange}
+            className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white"
+          >
+            提出變更
           </button>
         </div>
 

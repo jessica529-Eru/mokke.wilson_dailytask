@@ -8,7 +8,11 @@ import { logAudit } from "@/lib/audit";
  * request that reads room/score data — if Room.settlement_date has passed
  * and this period hasn't been settled yet, close it out:
  *   1. Sum each member's points for the period into SettlementRecord.
- *   2. Void remaining (uncompleted) quota on active extra_quota templates.
+ *   2. Reset every active extra_quota template's quota_used back to 0, so
+ *      the same quota_total is simply available again next period — no
+ *      per-template 沿用/封存 decision needed (confirmed with product owner:
+ *      a template good for 10 uses this period is good for 10 more next
+ *      period, automatically).
  *   3. Leave TaskCompletion/StreakRecord/Reward stock untouched — history
  *      is never deleted, scores just get re-scoped to "since last
  *      settlement" going forward (see getPeriodStart / scores route).
@@ -64,7 +68,7 @@ export async function runSettlementIfDue(roomId: number) {
       },
     });
 
-    await voidExhaustedQuotaTasks(tx, roomId);
+    await resetQuotaTasksForNextPeriod(tx, roomId);
 
     return record;
   });
@@ -78,17 +82,11 @@ export async function runSettlementIfDue(roomId: number) {
   });
 }
 
-async function voidExhaustedQuotaTasks(tx: Prisma.TransactionClient, roomId: number) {
-  // Each row needs its own quotaTotal echoed back into quotaUsed, so this
-  // can't be a single updateMany — walk them one at a time.
-  const templates = await tx.taskTemplate.findMany({
-    where: { roomId, type: "extra_quota", status: "active", quotaTotal: { not: null } },
+async function resetQuotaTasksForNextPeriod(tx: Prisma.TransactionClient, roomId: number) {
+  await tx.taskTemplate.updateMany({
+    where: { roomId, type: "extra_quota", status: "active" },
+    data: { quotaUsed: 0 },
   });
-  for (const t of templates) {
-    if (t.quotaTotal !== null && t.quotaUsed < t.quotaTotal) {
-      await tx.taskTemplate.update({ where: { id: t.id }, data: { quotaUsed: t.quotaTotal } });
-    }
-  }
 }
 
 /** The start of the room's current (unsettled) scoring period. */

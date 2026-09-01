@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireRoomMember } from "@/lib/currentMember";
+import { requireRoomMember, getPartner } from "@/lib/currentMember";
 import { ApiError, handleApiError } from "@/lib/api";
+import { computeResponseDeadline } from "@/lib/taskLifecycle";
 import { notify } from "@/lib/notify";
-import { getPartner } from "@/lib/currentMember";
 
 const bodySchema = z.object({ settlementDate: z.string().datetime() });
 
-// Scheduling the next settlement date is collaborative bookkeeping like a
-// top-up, not a scoring-affecting change, so (for this MVP) either member
-// can set it directly rather than going through room_settings_change.
+// The settlement date is first set as part of the room-creation scroll
+// contract (draftContentSnapshotSchema). Any change after the room is
+// active needs the partner's consent too, so this creates a
+// room_settings_change TaskApprovalRequest rather than writing directly.
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/settlement-date">) {
   try {
     const { id } = await ctx.params;
@@ -23,19 +24,33 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
       throw new ApiError(409, "房間尚未成立");
     }
 
-    const settlementDate = new Date(body.settlementDate);
-    if (settlementDate <= new Date()) {
+    if (new Date(body.settlementDate) <= new Date()) {
       throw new ApiError(400, "結算日期需在未來");
     }
 
-    await db.room.update({ where: { id: roomId }, data: { settlementDate } });
-
     const partner = await getPartner(roomId, member.id);
-    if (partner) {
-      await notify({ roomId, roomMemberId: partner.id, type: "settlement_upcoming" });
-    }
+    if (!partner) throw new ApiError(409, "尚未有搭檔");
 
-    return NextResponse.json({ ok: true, settlementDate });
+    const request = await db.taskApprovalRequest.create({
+      data: {
+        roomId,
+        requestType: "room_settings_change",
+        requestedById: member.id,
+        payload: JSON.stringify({ settlementDate: body.settlementDate }),
+        status: "pending",
+        responseDeadline: computeResponseDeadline(room.defaultReviewDays),
+      },
+    });
+
+    await notify({
+      roomId,
+      roomMemberId: partner.id,
+      type: "approval_pending",
+      relatedEntityType: "TaskApprovalRequest",
+      relatedEntityId: request.id,
+    });
+
+    return NextResponse.json({ approvalRequestId: request.id }, { status: 201 });
   } catch (err) {
     return handleApiError(err);
   }

@@ -31,6 +31,10 @@ export async function POST(req: NextRequest) {
       throw new ApiError(409, "房間名稱已被使用，請更換名稱");
     }
 
+    if (new Date(body.content.settlementDate) <= new Date()) {
+      throw new ApiError(400, "結算日期需在未來");
+    }
+
     const passwordHash = await hashPassword(body.password);
 
     const result = await db.$transaction(async (tx) => {
@@ -46,6 +50,7 @@ export async function POST(req: NextRequest) {
           roomName: body.content.roomName,
           status: "draft",
           initialMoneyPool: body.content.initialMoneyPool,
+          settlementDate: new Date(body.content.settlementDate),
         },
       });
 

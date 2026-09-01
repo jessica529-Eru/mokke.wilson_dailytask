@@ -69,7 +69,12 @@ export default function ApprovalsPage({ params }: { params: Promise<{ id: string
             <div className="text-sm text-amber-700">
               {REQUEST_TYPE_LABEL[r.requestType] ?? r.requestType} · {r.requestedByNickname} 提出
             </div>
-            <div className="font-medium">{r.taskTitle ?? "（房間設定）"}</div>
+            <div className="font-medium">
+              {r.taskTitle ??
+                (r.requestType === "room_settings_change" && typeof r.payload.settlementDate === "string"
+                  ? `新結算日：${new Date(r.payload.settlementDate).toLocaleString()}`
+                  : "（房間設定）")}
+            </div>
             {r.responseDeadline && (
               <div className="text-xs text-slate-500">
                 截止：{new Date(r.responseDeadline).toLocaleString()}

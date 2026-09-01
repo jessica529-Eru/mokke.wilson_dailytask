@@ -29,6 +29,11 @@ export type TaskDraftItem = z.infer<typeof taskDraftItemSchema>;
 export const draftContentSnapshotSchema = z.object({
   roomName: z.string().min(1).max(40),
   initialMoneyPool: z.number().min(0),
+  // Set once here as part of the scroll contract (both sides implicitly
+  // agree to it by approving the draft); changing it afterwards requires a
+  // room_settings_change TaskApprovalRequest instead (see settlement-date
+  // route and applyApprovalOutcome).
+  settlementDate: z.string().datetime(),
   dailyTasks: z.array(taskDraftItemSchema).max(50),
   extraTasks: z.array(taskDraftItemSchema).max(50),
 });

@@ -239,7 +239,7 @@ export async function resolveOverdueApprovals(roomId: number) {
           resolvedAt: new Date(),
         },
       });
-      if (req.taskTemplateId) {
+      if (req.taskTemplateId || req.requestType === "room_settings_change") {
         await applyApprovalOutcome(tx, req, approve);
       }
     });
@@ -248,11 +248,29 @@ export async function resolveOverdueApprovals(roomId: number) {
 
 export async function applyApprovalOutcome(
   tx: Prisma.TransactionClient,
-  req: { id: number; requestType: string; taskTemplateId: number | null; payload: string; requestedById: number },
+  req: {
+    id: number;
+    roomId: number;
+    requestType: string;
+    taskTemplateId: number | null;
+    payload: string;
+    requestedById: number;
+  },
   approve: boolean
 ) {
-  if (!req.taskTemplateId) return;
   const payload = JSON.parse(req.payload) as Record<string, unknown>;
+
+  if (req.requestType === "room_settings_change") {
+    if (approve && typeof payload.settlementDate === "string") {
+      await tx.room.update({
+        where: { id: req.roomId },
+        data: { settlementDate: new Date(payload.settlementDate) },
+      });
+    }
+    return;
+  }
+
+  if (!req.taskTemplateId) return;
 
   if (req.requestType === "create_task") {
     await tx.taskTemplate.update({

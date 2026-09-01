@@ -12,6 +12,7 @@ export default function NewRoomPage() {
   const router = useRouter();
   const [roomName, setRoomName] = useState("");
   const [initialMoneyPool, setInitialMoneyPool] = useState(1000);
+  const [settlementDate, setSettlementDate] = useState("");
   const [password, setPassword] = useState("");
   const [displayNickname, setDisplayNickname] = useState("");
   const [color, setColor] = useState<string>(MEMBER_COLOR_PALETTE[0].value);
@@ -35,12 +36,17 @@ export default function NewRoomPage() {
       setError("每個任務都需要填寫名稱");
       return;
     }
+    if (!settlementDate) {
+      setError("請設定結算日期");
+      return;
+    }
 
     setLoading(true);
     try {
       const content: DraftContentDTO = {
         roomName,
         initialMoneyPool,
+        settlementDate: new Date(settlementDate).toISOString(),
         dailyTasks,
         extraTasks,
       };
@@ -84,6 +90,18 @@ export default function NewRoomPage() {
               className="w-full rounded-lg border border-slate-300 px-3 py-2"
               value={initialMoneyPool}
               onChange={(e) => setInitialMoneyPool(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-slate-600">
+              結算日期（雙方同意此契約即代表同意此日期，之後要更改需要對方同意）
+            </label>
+            <input
+              type="datetime-local"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              value={settlementDate}
+              onChange={(e) => setSettlementDate(e.target.value)}
+              required
             />
           </div>
         </section>

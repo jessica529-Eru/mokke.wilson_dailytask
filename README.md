@@ -59,13 +59,16 @@ SESSION_SECRET="<random 32-byte hex>"
   是否已過期，過期且尚未結算則立即執行結算（`src/lib/settlement.ts`）。
 - 積分「歸零」不是刪除 `TaskCompletion`，而是把計分範圍改成「自上次結算
   以來」——`/scores` 與結算計算都以此為準，歷史紀錄完整保留。
-- `settlementDate` 的設定/更新目前是任一方可直接設定（比照加碼，不走
-  `room_settings_change` 審核流程），保留該 request type 供未來擴充。
-- 額度已用完的 `extra_quota` 沿用/封存（10.13）由使用者手動決定，尚無對應
-  UI；結算時只處理「未用完額度作廢」（10.11 第 2 點）。
+- `settlementDate` 首次設定是房間建立卷軸契約的一部分（`RoomCreationDraft.
+  contentSnapshot.settlementDate`），跟著契約一起經過雙方同意才生效；房間
+  成立後要再變更，會建立 `room_settings_change` 審核請求，需要對方同意才
+  會真的套用到 `Room.settlementDate`（`POST /api/rooms/:id/settlement-date`
+  只負責建立請求，實際套用在 `applyApprovalOutcome`）。
+- 額度任務（`extra_quota`）在每次結算時，所有進行中範本的 `quota_used`
+  一律重置為 0，`quota_total` 不變——不分是否用完，下一期自動可以再做滿
+  額度，不需要使用者手動選擇沿用或封存。
 
-尚未實作：Web Push 通知、卷軸契約以外的 `room_settings_change` 審核 UI、
-IconAsset 多影格動畫、額度沿用/封存 UI。
+尚未實作：Web Push 通知、IconAsset 多影格動畫。
 
 ## 專案結構
 

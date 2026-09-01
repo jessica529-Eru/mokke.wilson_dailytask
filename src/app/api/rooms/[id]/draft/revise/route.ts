@@ -43,6 +43,10 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
       }
     }
 
+    if (new Date(body.content.settlementDate) <= new Date()) {
+      throw new ApiError(400, "結算日期需在未來");
+    }
+
     const newDraft = await db.$transaction(async (tx) => {
       await tx.roomCreationDraft.update({
         where: { id: latest.id },
@@ -53,6 +57,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
         data: {
           roomName: body.content.roomName,
           initialMoneyPool: body.content.initialMoneyPool,
+          settlementDate: new Date(body.content.settlementDate),
         },
       });
       return tx.roomCreationDraft.create({

@@ -14,6 +14,12 @@ import type {
 
 type MeResponse = { member: { id: number } | null };
 
+function toDatetimeLocal(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function DraftReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
   const roomId = Number(id);
@@ -170,6 +176,10 @@ export default function DraftReviewPage({ params }: { params: Promise<{ id: stri
               <dt className="text-slate-500">初始總金額</dt>
               <dd className="font-medium">{latest.content.initialMoneyPool} 元（雙方各半）</dd>
             </div>
+            <div>
+              <dt className="text-slate-500">結算日期</dt>
+              <dd className="font-medium">{new Date(latest.content.settlementDate).toLocaleString()}</dd>
+            </div>
           </dl>
 
           <TaskList title="日常任務" items={latest.content.dailyTasks} nameFor={nameFor} />
@@ -201,6 +211,13 @@ export default function DraftReviewPage({ params }: { params: Promise<{ id: stri
               className="w-full rounded-lg border border-slate-300 px-3 py-2"
               value={editContent.initialMoneyPool}
               onChange={(e) => setEditContent({ ...editContent, initialMoneyPool: Number(e.target.value) })}
+            />
+            <label className="block text-sm text-slate-600">結算日期</label>
+            <input
+              type="datetime-local"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              value={toDatetimeLocal(editContent.settlementDate)}
+              onChange={(e) => setEditContent({ ...editContent, settlementDate: new Date(e.target.value).toISOString() })}
             />
           </div>
 

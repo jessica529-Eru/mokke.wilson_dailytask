@@ -19,6 +19,7 @@ export type TaskDraftItemDTO = {
 export type DraftContentDTO = {
   roomName: string;
   initialMoneyPool: number;
+  settlementDate: string;
   dailyTasks: TaskDraftItemDTO[];
   extraTasks: TaskDraftItemDTO[];
 };
