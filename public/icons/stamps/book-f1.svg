@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128"><g opacity="0.45" transform="translate(64,64) scale(0.65) rotate(-12) translate(-64,-64)">
+  <circle cx="64" cy="64" r="58" fill="none" stroke="#78350f" stroke-width="4" stroke-dasharray="6 4"/>
+  <path d="M64 40c-8-6-20-8-30-6v52c10-2 22 0 30 6 8-6 20-8 30-6V34c-10-2-22 0-30 6z" fill="none" stroke="#78350f" stroke-width="5" stroke-linejoin="round"/>
+  <line x1="64" y1="40" x2="64" y2="92" stroke="#78350f" stroke-width="5"/>
+</g></svg>

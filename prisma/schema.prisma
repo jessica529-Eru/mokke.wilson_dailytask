@@ -173,6 +173,7 @@ model RoomMember {
   notifications         Notification[]
   createdIconAssets     IconAsset[]
   auditLogs             AuditLog[]
+  pushSubscriptions     PushSubscription[]
 
   @@unique([roomId, password])
   @@map("room_members")
@@ -421,4 +422,20 @@ model AuditLog {
   createdAt         DateTime    @default(now()) @map("created_at")
 
   @@map("audit_logs")
+}
+
+// Not in the section-9 spec model — implementation detail backing the Web
+// Push delivery mentioned in section 12 ("站內未讀提示備援" is Notification;
+// this is the actual push transport). One row per browser/device a member
+// has granted permission on.
+model PushSubscription {
+  id           Int        @id @default(autoincrement())
+  roomMemberId Int        @map("room_member_id")
+  roomMember   RoomMember @relation(fields: [roomMemberId], references: [id], onDelete: Cascade)
+  endpoint     String     @unique
+  p256dh       String
+  auth         String
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@map("push_subscriptions")
 }

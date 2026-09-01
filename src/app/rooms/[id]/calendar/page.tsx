@@ -115,7 +115,7 @@ export default function CalendarPage({ params }: { params: Promise<{ id: string 
                     <span key={i2} title={s.title} className="h-5 w-5">
                       {s.icon ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={s.icon[0]} alt={s.title} className="h-full w-full" />
+                        <img src={s.icon[s.icon.length - 1]} alt={s.title} className="h-full w-full" />
                       ) : (
                         <span className="block h-full w-full rounded-full bg-amber-400" />
                       )}
@@ -129,7 +129,7 @@ export default function CalendarPage({ params }: { params: Promise<{ id: string 
                     <span key={i2} title={s.title} className="h-3.5 w-3.5">
                       {s.icon ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={s.icon[0]} alt={s.title} className="h-full w-full" />
+                        <img src={s.icon[s.icon.length - 1]} alt={s.title} className="h-full w-full" />
                       ) : null}
                     </span>
                   ))}

@@ -29,15 +29,26 @@ SESSION_SECRET="<random 32-byte hex>"
 
 `SESSION_SECRET` 可用 `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` 產生。
 
+Web Push 需要另外三個變數（沒有設定時，站內通知照常運作，只是不會有瀏覽器推播）：
+
+```
+NEXT_PUBLIC_VAPID_PUBLIC_KEY="..."
+VAPID_PRIVATE_KEY="..."
+VAPID_SUBJECT="mailto:you@example.com"
+```
+
+用 `npx web-push generate-vapid-keys` 產生金鑰。
+
 ## 目前實作範圍
 
-依 `PROJECT_SPEC_v2.md` 第 13 節優先順序，已完成第 1、2、3、4、6、8、9、10、11、12、13、15 項：
+依 `PROJECT_SPEC_v2.md` 第 13 節優先順序，15 項全部完成：
 
 1. Room / RoomMember / 邀請碼與登入機制
 2. RoomCreationDraft 卷軸契約往返流程（含蓋章/退回動畫、無限次來回修改）
 3. TaskTemplate（daily / extra_normal / extra_quota，含 assign_scope）/ TaskCompletion
 4. TaskApprovalRequest 核准流程（含逾期自動核准/拒絕）
-5. IconAsset 圖示資產庫（靜態 SVG，動畫影格未做）
+5. IconAsset 圖示資產庫（預設印章皆為 3 影格：落下→蓋下→定格，前端
+   `FrameStamp` 元件播放）
 6. 月曆蓋章視覺（`/rooms/[id]/calendar`，含 10.9 郵票可見度權限過濾）
 7. 首頁拉鋸戰比例尺視覺（即時比例、獎金池、加碼掉落動畫、即時試算）
 8. Reward / RewardAssignment / RewardUnlock（`/rooms/[id]/rewards`，含 single_task /
@@ -48,8 +59,8 @@ SESSION_SECRET="<random 32-byte hex>"
     連續天數重新計算）
 12. 驚喜任務觸發機制
 13. SettlementRecord 結算邏輯（詳見下方「結算機制」小節）
-14. Notification 全類型（`/rooms/[id]/notifications`，站內未讀提示；尚無
-    Web Push 推播）
+14. Notification 全類型（`/rooms/[id]/notifications` 站內未讀提示 +
+    Web Push 瀏覽器推播，詳見下方「Web Push」小節）
 15. AuditLog（無 UI，寫入卷軸核准、任務審核、加碼、結算等關鍵操作）
 
 ### 結算機制設計取捨
@@ -68,7 +79,20 @@ SESSION_SECRET="<random 32-byte hex>"
   一律重置為 0，`quota_total` 不變——不分是否用完，下一期自動可以再做滿
   額度，不需要使用者手動選擇沿用或封存。
 
-尚未實作：Web Push 通知、IconAsset 多影格動畫。
+### Web Push
+
+- 站內通知（`Notification` 表）是唯一真實來源；`lib/notify.ts` 每建立一筆
+  通知，會順手（fire-and-forget，不等待、不影響原本請求）呼叫
+  `lib/push.ts` 嘗試推播，失敗（未訂閱、VAPID 未設定、endpoint 已失效）
+  都是靜默略過，不影響主流程。
+- 訂閱資料存在 `PushSubscription`（不在規格書第 9 節資料模型內，屬於
+  Web Push 傳輸層的實作細節，一個成員可以有多筆，對應多個裝置/瀏覽器）。
+- Service worker（`public/sw.js`）處理 `push` 事件顯示通知、
+  `notificationclick` 事件把使用者帶回通知頁。
+- 房間內頁首右上角有「啟用推播通知」按鈕（`PushNotificationToggle`），
+  會請求瀏覽器通知權限並訂閱。iOS Safari 對 Web Push 支援有限（需先加到
+  主畫面成為 PWA），站內通知中心是這類情況下的備援，符合規格書第 12 節
+  的技術棧備註。
 
 ## 專案結構
 

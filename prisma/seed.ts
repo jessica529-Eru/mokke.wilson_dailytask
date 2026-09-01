@@ -3,29 +3,40 @@ import { PrismaClient } from "../src/generated/prisma/client";
 
 const db = new PrismaClient();
 
-const DEFAULT_STAMPS: { name: string; file: string }[] = [
-  { name: "啞鈴", file: "dumbbell.svg" },
-  { name: "太陽", file: "sun.svg" },
-  { name: "月亮", file: "moon.svg" },
-  { name: "書本", file: "book.svg" },
-  { name: "水滴", file: "water-drop.svg" },
-  { name: "愛心", file: "heart.svg" },
-  { name: "掃把", file: "broom.svg" },
-  { name: "星星", file: "star.svg" },
+// Frame order matches the stamp animation sequence (section 8.2): falling
+// in (faint, small, tilted) -> impact (full opacity, slightly oversized) ->
+// settled (the original static artwork).
+const DEFAULT_STAMPS: { name: string; base: string }[] = [
+  { name: "啞鈴", base: "dumbbell" },
+  { name: "太陽", base: "sun" },
+  { name: "月亮", base: "moon" },
+  { name: "書本", base: "book" },
+  { name: "水滴", base: "water-drop" },
+  { name: "愛心", base: "heart" },
+  { name: "掃把", base: "broom" },
+  { name: "星星", base: "star" },
 ];
+
+function framesFor(base: string) {
+  return [`/icons/stamps/${base}-f1.svg`, `/icons/stamps/${base}-f2.svg`, `/icons/stamps/${base}.svg`];
+}
 
 async function main() {
   for (const stamp of DEFAULT_STAMPS) {
+    const frameImageUrls = JSON.stringify(framesFor(stamp.base));
     const existing = await db.iconAsset.findFirst({
       where: { roomId: null, category: "stamp", name: stamp.name },
     });
-    if (existing) continue;
+    if (existing) {
+      await db.iconAsset.update({ where: { id: existing.id }, data: { frameImageUrls } });
+      continue;
+    }
     await db.iconAsset.create({
       data: {
         roomId: null,
         category: "stamp",
         name: stamp.name,
-        frameImageUrls: JSON.stringify([`/icons/stamps/${stamp.file}`]),
+        frameImageUrls,
         createdById: null,
       },
     });

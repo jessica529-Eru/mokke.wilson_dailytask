@@ -32,8 +32,9 @@ export function StampIconPicker({
             value === a.id ? "border-slate-900 bg-slate-100" : "border-slate-200"
           }`}
         >
+          {/* Settled (last) frame — the picker shows the final look, not the in-flight one. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={a.frames[0]} alt={a.name} width={28} height={28} />
+          <img src={a.frames[a.frames.length - 1]} alt={a.name} width={28} height={28} />
         </button>
       ))}
     </div>

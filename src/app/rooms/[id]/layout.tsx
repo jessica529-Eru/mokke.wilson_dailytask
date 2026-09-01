@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { db } from "@/lib/db";
 import { LogoutButton } from "@/components/LogoutButton";
+import { PushNotificationToggle } from "@/components/PushNotificationToggle";
 
 export default async function RoomLayout({
   children,
@@ -50,7 +51,10 @@ export default async function RoomLayout({
               </Link>
             </nav>
           )}
-          <LogoutButton />
+          <div className="flex items-center gap-3">
+            {!isDraft && <PushNotificationToggle roomId={roomId} />}
+            <LogoutButton />
+          </div>
         </div>
       </header>
       <div className="mx-auto max-w-3xl px-4 py-6">{children}</div>

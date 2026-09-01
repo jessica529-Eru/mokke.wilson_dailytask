@@ -3,6 +3,7 @@
 import { useEffect, useState, use as usePromise } from "react";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { StampIconPicker } from "@/components/StampIconPicker";
+import { FrameStamp } from "@/components/FrameStamp";
 import type { AssignScope, IconAssetDTO, MemberDTO, TaskTemplateDTO, TaskType } from "@/lib/types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -281,8 +282,7 @@ function TaskRow({
         <div className="flex items-center gap-3">
           {task.stampIcon && (
             <span className={`h-10 w-10 shrink-0 ${justStamped ? "animate-stamp-fall" : ""}`}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={task.stampIcon.frames[0]} alt="" className="h-full w-full" />
+              <FrameStamp frames={task.stampIcon.frames} play={justStamped} className="h-full w-full" />
             </span>
           )}
           <div>
