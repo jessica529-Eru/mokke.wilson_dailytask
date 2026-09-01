@@ -60,6 +60,8 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
   const [rewards, setRewards] = useState<RewardDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showPartnerTasks, setShowPartnerTasks] = useState(false);
+  const [showExhaustedQuota, setShowExhaustedQuota] = useState(false);
 
   async function load() {
     try {
@@ -86,8 +88,25 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
+  // "Partner's task" here means exclusively theirs (assignScope self/partner
+  // resolved against the viewer) — a "both" task still shows since it's
+  // also something I have to do myself.
+  const isPartnerOnly = (t: TaskTemplateDTO) =>
+    t.assignScope !== "both" && t.assignedToId !== null && t.assignedToId !== myId;
+  const isExhaustedQuota = (t: TaskTemplateDTO) =>
+    t.type === "extra_quota" && t.quotaTotal !== null && t.quotaUsed >= t.quotaTotal;
+
+  const partnerHiddenCount = tasks.filter(isPartnerOnly).length;
+  const exhaustedHiddenCount = tasks.filter(isExhaustedQuota).length;
+
+  const visibleTasks = tasks.filter((t) => {
+    if (!showPartnerTasks && isPartnerOnly(t)) return false;
+    if (!showExhaustedQuota && isExhaustedQuota(t)) return false;
+    return true;
+  });
+
   const tasksByType: Record<TaskType, TaskTemplateDTO[]> = { daily: [], extra_normal: [], extra_quota: [] };
-  for (const t of tasks) tasksByType[t.type].push(t);
+  for (const t of visibleTasks) tasksByType[t.type].push(t);
 
   return (
     <div className="space-y-6">
@@ -115,7 +134,27 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
         />
       )}
 
+      <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={showPartnerTasks} onChange={(e) => setShowPartnerTasks(e.target.checked)} />
+          顯示對方的任務
+          {partnerHiddenCount > 0 && !showPartnerTasks && `（已隱藏 ${partnerHiddenCount} 項）`}
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input
+            type="checkbox"
+            checked={showExhaustedQuota}
+            onChange={(e) => setShowExhaustedQuota(e.target.checked)}
+          />
+          顯示已達額度上限的任務
+          {exhaustedHiddenCount > 0 && !showExhaustedQuota && `（已隱藏 ${exhaustedHiddenCount} 項）`}
+        </label>
+      </div>
+
       {tasks.length === 0 && <p className="text-sm text-slate-400">目前沒有任務</p>}
+      {tasks.length > 0 && visibleTasks.length === 0 && (
+        <p className="text-sm text-slate-400">目前沒有符合篩選條件的任務，可以打開上面的篩選項查看。</p>
+      )}
 
       {TYPE_ORDER.map((type) => (
         <TaskSection
