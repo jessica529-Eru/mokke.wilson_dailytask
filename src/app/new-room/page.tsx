@@ -6,6 +6,7 @@ import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { ColorPicker } from "@/components/ColorPicker";
 import { MEMBER_COLOR_PALETTE } from "@/lib/colors";
 import { TaskDraftListEditor } from "@/components/TaskDraftListEditor";
+import { ImageUploadField } from "@/components/ImageUploadField";
 import type { DraftContentDTO, IconAssetDTO, TaskDraftItemDTO } from "@/lib/types";
 
 export default function NewRoomPage() {
@@ -16,6 +17,7 @@ export default function NewRoomPage() {
   const [password, setPassword] = useState("");
   const [displayNickname, setDisplayNickname] = useState("");
   const [color, setColor] = useState<string>(MEMBER_COLOR_PALETTE[0].value);
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [dailyTasks, setDailyTasks] = useState<TaskDraftItemDTO[]>([]);
   const [extraTasks, setExtraTasks] = useState<TaskDraftItemDTO[]>([]);
   const [icons, setIcons] = useState<IconAssetDTO[]>([]);
@@ -52,7 +54,7 @@ export default function NewRoomPage() {
       };
       const data = await apiFetch<{ room: { id: number } }>("/api/rooms", {
         method: "POST",
-        body: JSON.stringify({ password, displayNickname, color, content }),
+        body: JSON.stringify({ password, displayNickname, color, avatarUrl, content }),
       });
       router.push(`/rooms/${data.room.id}/draft`);
       router.refresh();
@@ -133,6 +135,7 @@ export default function NewRoomPage() {
             <label className="mb-1 block text-sm text-slate-600">個人識別色</label>
             <ColorPicker value={color} onChange={setColor} />
           </div>
+          <ImageUploadField value={avatarUrl} onChange={setAvatarUrl} />
         </section>
 
         <section className="space-y-3">

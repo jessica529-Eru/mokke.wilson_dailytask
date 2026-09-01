@@ -5,13 +5,14 @@ import { hashPassword } from "@/lib/password";
 import { isValidMemberColor } from "@/lib/colors";
 import { createSession } from "@/lib/session";
 import { ApiError, handleApiError } from "@/lib/api";
+import { imageUrlSchema } from "@/lib/zodHelpers";
 
 const joinSchema = z.object({
   inviteCode: z.string().min(1),
   password: z.string().min(1).max(60),
   displayNickname: z.string().min(1).max(30),
   color: z.string().min(1),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: imageUrlSchema.optional(),
 });
 
 export async function POST(req: NextRequest) {

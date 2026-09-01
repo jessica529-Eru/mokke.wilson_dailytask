@@ -94,6 +94,30 @@ VAPID_SUBJECT="mailto:you@example.com"
   主畫面成為 PWA），站內通知中心是這類情況下的備援，符合規格書第 12 節
   的技術棧備註。
 
+**測試方式**：`docs/manual-testing-checklist.md` 記錄了自動化測試能驗證
+的範圍（manifest、service worker、UI 訂閱流程），以及為什麼真正的推播
+送達必須由人在真實瀏覽器/裝置上測，附上桌面/Android/iOS 各自的操作步驟。
+
+### 圖片上傳
+
+- `POST /api/uploads`（multipart/form-data，欄位名 `file`）接受
+  JPEG/PNG/WebP/GIF、單檔上限 5MB，存到本機 `public/uploads/`（規格書
+  第 12 節允許的「本地/雲端儲存」兩個選項中，本地是這裡的預設，沒有配置
+  任何雲端憑證；要換成 S3 相容服務只需要改 `src/lib/uploads.ts` 這一個
+  函式）。回傳 `{ url: "/uploads/xxx.png" }`。
+- 這個端點刻意不需要登入：大頭貼上傳發生在「房間創建者/加入者都還沒有
+  session」的時間點，沒有成員可以驗證身份；驗證改為嚴格限制檔案類型/
+  大小，且整個 app 是邀請碼制、非公開註冊，可接受這個取捨。
+- 前端：`ImageUploadField`（單張，大頭貼，`/new-room`、`/join` 都有接上）、
+  `MultiImageUploadField`（最多 4 張，任務完成時的證明照片，`/rooms/[id]
+  /tasks` 完成表單接上）。兩者都會先呼叫上傳端點拿到 URL，再把 URL 一起
+  送進原本就存在的 `avatarUrl` / `proofImageUrls` 欄位——後端資料模型完全
+  沒變，只是把「使用者自己貼網址」換成「真的上傳檔案」。
+- 連帶修正：`avatarUrl` / `proofImageUrls` / `contentImageUrls` 原本用
+  `z.string().url()` 驗證，會拒絕 `/uploads/xxx.png` 這種相對路徑；改用
+  `src/lib/zodHelpers.ts` 的 `imageUrlSchema`（同時接受絕對網址與同源相對
+  路徑）。
+
 ## 專案結構
 
 - `prisma/schema.prisma` — 完整資料模型

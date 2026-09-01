@@ -4,6 +4,7 @@ import { useEffect, useState, use as usePromise } from "react";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { StampIconPicker } from "@/components/StampIconPicker";
 import { FrameStamp } from "@/components/FrameStamp";
+import { MultiImageUploadField } from "@/components/MultiImageUploadField";
 import type { AssignScope, IconAssetDTO, MemberDTO, TaskTemplateDTO, TaskType } from "@/lib/types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -223,6 +224,7 @@ function TaskRow({
 }) {
   const [completing, setCompleting] = useState(false);
   const [proofText, setProofText] = useState("");
+  const [proofImageUrls, setProofImageUrls] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [justStamped, setJustStamped] = useState(false);
 
@@ -238,10 +240,12 @@ function TaskRow({
         body: JSON.stringify({
           completedLocalDate: localDate,
           proofText: proofText || undefined,
+          proofImageUrls: proofImageUrls.length > 0 ? proofImageUrls : undefined,
         }),
       });
       setCompleting(false);
       setProofText("");
+      setProofImageUrls([]);
       setJustStamped(true);
       setTimeout(() => setJustStamped(false), 700);
       onChanged();
@@ -307,12 +311,15 @@ function TaskRow({
           {completing ? (
             <div className="space-y-2">
               {task.requiresProof && (
-                <textarea
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="留下文字證明（會產生郵票）"
-                  value={proofText}
-                  onChange={(e) => setProofText(e.target.value)}
-                />
+                <>
+                  <textarea
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="留下文字證明（會產生郵票）"
+                    value={proofText}
+                    onChange={(e) => setProofText(e.target.value)}
+                  />
+                  <MultiImageUploadField value={proofImageUrls} onChange={setProofImageUrls} />
+                </>
               )}
               <div className="flex gap-2">
                 <button onClick={() => setCompleting(false)} className="flex-1 rounded-lg border border-slate-300 py-2 text-sm">

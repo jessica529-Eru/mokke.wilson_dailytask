@@ -46,3 +46,7 @@ next-env.d.ts
 # sqlite dev database
 prisma/*.db
 prisma/*.db-journal
+
+# user-uploaded files (avatars, task proof photos)
+/public/uploads/*
+!/public/uploads/.gitkeep

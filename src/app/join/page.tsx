@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { ColorPicker } from "@/components/ColorPicker";
 import { MEMBER_COLOR_PALETTE } from "@/lib/colors";
+import { ImageUploadField } from "@/components/ImageUploadField";
 
 export default function JoinPage() {
   const router = useRouter();
@@ -12,6 +13,7 @@ export default function JoinPage() {
   const [password, setPassword] = useState("");
   const [displayNickname, setDisplayNickname] = useState("");
   const [color, setColor] = useState<string>(MEMBER_COLOR_PALETTE[3].value);
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +24,7 @@ export default function JoinPage() {
     try {
       const data = await apiFetch<{ room: { id: number } }>("/api/rooms/join", {
         method: "POST",
-        body: JSON.stringify({ inviteCode, password, displayNickname, color }),
+        body: JSON.stringify({ inviteCode, password, displayNickname, color, avatarUrl }),
       });
       router.push(`/rooms/${data.room.id}/draft`);
       router.refresh();
@@ -72,6 +74,7 @@ export default function JoinPage() {
           <label className="mb-1 block text-sm text-slate-600">個人識別色</label>
           <ColorPicker value={color} onChange={setColor} />
         </div>
+        <ImageUploadField value={avatarUrl} onChange={setAvatarUrl} />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button
           type="submit"

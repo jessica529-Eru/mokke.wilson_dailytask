@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireRoomMember } from "@/lib/currentMember";
 import { handleApiError } from "@/lib/api";
+import { imageUrlSchema } from "@/lib/zodHelpers";
 
 const assignmentSchema = z.object({
   taskTemplateId: z.number().int().optional(),
@@ -14,7 +15,7 @@ const createRewardSchema = z.object({
   type: z.enum(["fixed_item", "rescue_voucher", "other"]),
   title: z.string().min(1).max(60),
   contentText: z.string().max(2000).optional(),
-  contentImageUrls: z.array(z.string().url()).max(9).optional(),
+  contentImageUrls: z.array(imageUrlSchema).max(9).optional(),
   stockTotal: z.number().int().min(1).optional(),
   assignment: assignmentSchema.optional(),
 });

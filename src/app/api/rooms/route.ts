@@ -7,12 +7,13 @@ import { isValidMemberColor } from "@/lib/colors";
 import { createSession } from "@/lib/session";
 import { ApiError, handleApiError } from "@/lib/api";
 import { draftContentSnapshotSchema } from "@/lib/roomDraft";
+import { imageUrlSchema } from "@/lib/zodHelpers";
 
 const createRoomSchema = z.object({
   password: z.string().min(1).max(60),
   displayNickname: z.string().min(1).max(30),
   color: z.string().min(1),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: imageUrlSchema.optional(),
   content: draftContentSnapshotSchema,
 });
 

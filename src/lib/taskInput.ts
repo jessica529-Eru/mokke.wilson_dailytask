@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { imageUrlSchema } from "@/lib/zodHelpers";
 
 export const createTaskSchema = z
   .object({
@@ -35,7 +36,7 @@ export const editTaskSchema = z.object({
 
 export const completeTaskSchema = z.object({
   proofText: z.string().max(2000).optional(),
-  proofImageUrls: z.array(z.string().url()).max(9).optional(),
+  proofImageUrls: z.array(imageUrlSchema).max(9).optional(),
   // The member's own local calendar date (YYYY-MM-DD). Preferred over a
   // server-computed date since only the client reliably knows the member's
   // timezone (section 10.12) — falls back to Room.settlementTimezone if omitted.
