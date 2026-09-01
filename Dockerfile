@@ -13,8 +13,15 @@ WORKDIR /app
 # this only exists so Prisma's client construction doesn't blow up on a
 # missing env var during the build layer.
 ENV DATABASE_URL="file:./build-placeholder.db"
-ENV NODE_ENV=production
 
+# NODE_ENV=production must NOT be set before `npm ci`: this repo has no
+# standalone-output trimming, so tsx/dotenv/prisma (all devDependencies)
+# are needed at runtime too — `npm run db:seed` (tsx) and even
+# `prisma generate` itself (prisma.config.ts does `import "dotenv/config"`)
+# both broke when NODE_ENV=production caused `npm ci` to skip
+# devDependencies, reproduced locally against a clean install. Setting it
+# only after `npm ci` keeps every install full while still marking the
+# final running process as production for Next's own runtime behavior.
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -25,6 +32,7 @@ RUN npm run build
 
 RUN chmod +x docker/entrypoint.sh
 
+ENV NODE_ENV=production
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0

@@ -30,11 +30,13 @@ export async function GET(_req: Request, ctx: RouteContext<"/uploads/[filename]"
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  const filePath = path.join(resolveUploadDir(), filename);
+  // UPLOAD_DIR (via resolveUploadDir()) depends on an env var — same
+  // Turbopack tracing note as lib/uploads.ts's saveUploadedImage.
+  const filePath = path.join(/* turbopackIgnore: true */ resolveUploadDir(), filename);
   try {
-    const stats = await stat(/* turbopackIgnore: true */ filePath);
+    const stats = await stat(filePath);
     if (!stats.isFile()) throw new Error("not a file");
-    const data = await readFile(/* turbopackIgnore: true */ filePath);
+    const data = await readFile(filePath);
     return new NextResponse(new Uint8Array(data), {
       headers: {
         "Content-Type": contentType,

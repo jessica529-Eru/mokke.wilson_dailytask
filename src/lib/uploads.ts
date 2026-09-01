@@ -49,10 +49,12 @@ export async function saveUploadedImage(file: File): Promise<{ url: string }> {
   // UPLOAD_DIR's value depends on an env var, so Turbopack can't statically
   // scope this filesystem access — ignoring its trace-the-whole-project
   // fallback is correct here since this is a full (non-standalone) build.
+  // The ignore comment must sit inside the call whose argument is dynamic,
+  // not in front of the whole expression, or Turbopack doesn't pick it up.
   await mkdir(/* turbopackIgnore: true */ UPLOAD_DIR, { recursive: true });
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(/* turbopackIgnore: true */ path.join(UPLOAD_DIR, filename), buffer);
+  await writeFile(path.join(/* turbopackIgnore: true */ UPLOAD_DIR, filename), buffer);
 
   return { url: `/uploads/${filename}` };
 }
