@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Stamp / seal animation shared by the scroll-contract flow (section 2.2)
+   and the calendar stamping effect (section 6.2): falls from above, then a
+   short shake on impact. */
+@keyframes stamp-fall {
+  0% {
+    transform: translateY(-140px) scale(1.15) rotate(-8deg);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(0) scale(1) rotate(-4deg);
+    opacity: 1;
+  }
+  72% {
+    transform: translateY(2px) scale(1.02) rotate(-6deg);
+  }
+  84% {
+    transform: translateY(-1px) scale(0.99) rotate(-3deg);
+  }
+  100% {
+    transform: translateY(0) scale(1) rotate(-4deg);
+  }
+}
+
+.animate-stamp-fall {
+  animation: stamp-fall 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes coin-fall {
+  0% {
+    transform: translateY(-120px) rotate(0deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) rotate(180deg);
+    opacity: 1;
+  }
+}
+
+.animate-coin-fall {
+  animation: coin-fall 0.7s ease-in forwards;
+}
+
+/* Tug-of-war home visualization: eased width changes read as a gentle
+   push/pull rather than a snap. */
+.tug-of-war-bar {
+  transition: flex-basis 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}

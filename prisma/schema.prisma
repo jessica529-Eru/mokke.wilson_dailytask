@@ -1,0 +1,424 @@
+// Prisma schema for 雙人任務集點競爭 App
+// See PROJECT_SPEC_v2.md section 9 for the full data model this mirrors.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum RoomStatus {
+  draft
+  active
+  archived
+}
+
+enum SettlementCycleType {
+  custom_date
+}
+
+enum OverdueDefaultResult {
+  approve
+  reject
+}
+
+enum RoomMemberRole {
+  creator
+  member
+}
+
+enum DraftStatus {
+  pending_review
+  approved
+  revision_requested
+}
+
+enum TaskType {
+  daily
+  extra_normal
+  extra_quota
+}
+
+enum AssignScope {
+  self
+  partner
+  both
+}
+
+enum TaskStatus {
+  pending_approval
+  active
+  rejected
+  deleted_pending_approval
+  archived
+}
+
+enum TriggerTargetType {
+  specific_task
+  random_from_existing
+}
+
+enum ApprovalRequestType {
+  create_task
+  edit_task
+  delete_task
+  change_quota_reward
+  room_settings_change
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+  auto_approved
+  auto_rejected
+}
+
+enum RewardType {
+  produced_content
+  fixed_item
+  rescue_voucher
+  other
+}
+
+enum UnlockConditionType {
+  single_task
+  multi_task_threshold
+  streak_days
+}
+
+enum IconCategory {
+  stamp
+  stamp_frame
+  scale_anim
+}
+
+enum NotificationType {
+  approval_pending
+  approval_deadline_soon
+  daily_task_reminder
+  task_rejected
+  task_approved
+  reward_unlocked
+  settlement_upcoming
+  streak_breaking_soon
+  money_topped_up
+  surprise_task_triggered
+  room_draft_revision_requested
+  room_draft_approved
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model Room {
+  id                   Int                  @id @default(autoincrement())
+  inviteCode           String               @unique @map("invite_code")
+  roomName             String               @unique @map("room_name")
+  status               RoomStatus           @default(draft)
+  settlementCycleType  SettlementCycleType  @default(custom_date) @map("settlement_cycle_type")
+  settlementDate       DateTime?            @map("settlement_date")
+  settlementTimezone   String               @default("Asia/Taipei") @map("settlement_timezone")
+  overdueDefaultResult OverdueDefaultResult @default(reject) @map("overdue_default_result")
+  defaultReviewDays    Int                  @default(3) @map("default_review_days")
+  initialMoneyPool     Decimal              @default(0) @map("initial_money_pool")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+
+  members          RoomMember[]
+  drafts           RoomCreationDraft[]
+  topUps           MoneyPoolTopUp[]
+  taskTemplates    TaskTemplate[]
+  approvalRequests TaskApprovalRequest[]
+  rewards          Reward[]
+  streakRecords    StreakRecord[]
+  settlements      SettlementRecord[]
+  notifications    Notification[]
+  iconAssets       IconAsset[]
+  auditLogs        AuditLog[]
+
+  @@map("rooms")
+}
+
+model RoomMember {
+  id              Int            @id @default(autoincrement())
+  roomId          Int            @map("room_id")
+  room            Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  password        String
+  displayNickname String         @map("display_nickname")
+  avatarUrl       String?        @map("avatar_url")
+  color           String
+  role            RoomMemberRole @default(member)
+  joinedAt        DateTime       @default(now()) @map("joined_at")
+
+  proposedDrafts        RoomCreationDraft[]   @relation("DraftProposedBy")
+  topUps                MoneyPoolTopUp[]
+  createdTaskTemplates  TaskTemplate[]        @relation("TaskCreatedBy")
+  assignedTaskTemplates TaskTemplate[]        @relation("TaskAssignedTo")
+  taskCompletions       TaskCompletion[]
+  approvalRequests      TaskApprovalRequest[] @relation("ApprovalRequestedBy")
+  createdRewards        Reward[]              @relation("RewardCreatedBy")
+  rewardUnlocks         RewardUnlock[]
+  streakRecords         StreakRecord[]
+  rescueVoucherUsages   RescueVoucherUsage[]
+  notifications         Notification[]
+  createdIconAssets     IconAsset[]
+  auditLogs             AuditLog[]
+
+  @@unique([roomId, password])
+  @@map("room_members")
+}
+
+model RoomCreationDraft {
+  id              Int         @id @default(autoincrement())
+  roomId          Int         @map("room_id")
+  room            Room        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  version         Int
+  proposedById    Int         @map("proposed_by")
+  proposedBy      RoomMember  @relation("DraftProposedBy", fields: [proposedById], references: [id])
+  contentSnapshot String      @map("content_snapshot") // JSON
+  itemComments    String?     @map("item_comments") // JSON, nullable
+  status          DraftStatus @default(pending_review)
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  @@unique([roomId, version])
+  @@map("room_creation_drafts")
+}
+
+model MoneyPoolTopUp {
+  id        Int        @id @default(autoincrement())
+  roomId    Int        @map("room_id")
+  room      Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  addedById Int        @map("added_by")
+  addedBy   RoomMember @relation(fields: [addedById], references: [id])
+  amount    Decimal
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@map("money_pool_top_ups")
+}
+
+model TaskTemplate {
+  id                      Int                @id @default(autoincrement())
+  roomId                  Int                @map("room_id")
+  room                    Room               @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  type                    TaskType
+  assignScope             AssignScope        @map("assign_scope")
+  title                   String
+  description             String?
+  createdById             Int?               @map("created_by")
+  createdBy               RoomMember?        @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  assignedToId            Int?               @map("assigned_to")
+  assignedTo              RoomMember?        @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  points                  Int?
+  requiresProof           Boolean            @default(false) @map("requires_proof")
+  stampIconAssetId        Int?               @map("stamp_icon_asset_id")
+  stampIconAsset          IconAsset?         @relation(fields: [stampIconAssetId], references: [id])
+  status                  TaskStatus         @default(pending_approval)
+  approvalDeadline        DateTime?          @map("approval_deadline")
+  quotaTotal              Int?               @map("quota_total")
+  quotaUsed               Int                @default(0) @map("quota_used")
+  streakCountsTowardDaily Boolean            @default(true) @map("streak_counts_toward_daily")
+  triggerProbability      Decimal?           @map("trigger_probability")
+  triggerTargetType       TriggerTargetType? @map("trigger_target_type")
+  triggerTargetTaskId     Int?               @map("trigger_target_task_id")
+  triggerTargetTask       TaskTemplate?      @relation("TriggerTarget", fields: [triggerTargetTaskId], references: [id])
+  triggeredByTasks        TaskTemplate[]     @relation("TriggerTarget")
+  isSystemGenerated       Boolean            @default(false) @map("is_system_generated")
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
+
+  completions       TaskCompletion[]
+  approvalRequests  TaskApprovalRequest[]
+  rewardAssignments RewardAssignment[]
+
+  @@map("task_templates")
+}
+
+model TaskCompletion {
+  id                      Int             @id @default(autoincrement())
+  taskTemplateId          Int             @map("task_template_id")
+  taskTemplate            TaskTemplate    @relation(fields: [taskTemplateId], references: [id], onDelete: Cascade)
+  roomMemberId            Int             @map("room_member_id")
+  roomMember              RoomMember      @relation(fields: [roomMemberId], references: [id])
+  completedAt             DateTime        @default(now()) @map("completed_at")
+  completedLocalDate      String          @map("completed_local_date") // date, stored as YYYY-MM-DD
+  proofText               String?         @map("proof_text")
+  proofImageUrls          String?         @map("proof_image_urls") // JSON array
+  pointsAwarded           Int             @map("points_awarded")
+  rewardId                Int?            @map("reward_id")
+  reward                  Reward?         @relation(fields: [rewardId], references: [id])
+  isMakeup                Boolean         @default(false) @map("is_makeup")
+  triggeredSurpriseTaskId Int?            @unique @map("triggered_surprise_task_id")
+  triggeredSurpriseTask   TaskCompletion? @relation("SurpriseTrigger", fields: [triggeredSurpriseTaskId], references: [id])
+  triggeredBy             TaskCompletion? @relation("SurpriseTrigger")
+  createdAt               DateTime        @default(now()) @map("created_at")
+
+  producedRewards Reward[] @relation("RewardSourceCompletion")
+
+  @@map("task_completions")
+}
+
+model TaskApprovalRequest {
+  id                       Int                 @id @default(autoincrement())
+  roomId                   Int                 @map("room_id")
+  room                     Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  taskTemplateId           Int?                @map("task_template_id")
+  taskTemplate             TaskTemplate?       @relation(fields: [taskTemplateId], references: [id])
+  requestType              ApprovalRequestType @map("request_type")
+  requestedById            Int                 @map("requested_by")
+  requestedBy              RoomMember          @relation("ApprovalRequestedBy", fields: [requestedById], references: [id])
+  payload                  String // JSON
+  appliesToCompletionIndex Int?                @map("applies_to_completion_index")
+  status                   ApprovalStatus      @default(pending)
+  responseDeadline         DateTime?           @map("response_deadline")
+  resolvedAt               DateTime?           @map("resolved_at")
+  createdAt                DateTime            @default(now()) @map("created_at")
+
+  @@map("task_approval_requests")
+}
+
+model Reward {
+  id                     Int             @id @default(autoincrement())
+  roomId                 Int             @map("room_id")
+  room                   Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  type                   RewardType
+  title                  String
+  contentText            String?         @map("content_text")
+  contentImageUrls       String?         @map("content_image_urls") // JSON array
+  stockTotal             Int?            @map("stock_total")
+  stockRemaining         Int?            @map("stock_remaining")
+  sourceTaskCompletionId Int?            @unique @map("source_task_completion_id")
+  sourceTaskCompletion   TaskCompletion? @relation("RewardSourceCompletion", fields: [sourceTaskCompletionId], references: [id])
+  createdById            Int             @map("created_by")
+  createdBy              RoomMember      @relation("RewardCreatedBy", fields: [createdById], references: [id])
+  createdAt              DateTime        @default(now()) @map("created_at")
+
+  assignments            RewardAssignment[]
+  unlocks                RewardUnlock[]
+  taskCompletionsAwarded TaskCompletion[]
+  rescueVoucherUsages    RescueVoucherUsage[]
+
+  @@map("rewards")
+}
+
+model RewardAssignment {
+  id                   Int                 @id @default(autoincrement())
+  rewardId             Int                 @map("reward_id")
+  reward               Reward              @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  taskTemplateId       Int?                @map("task_template_id")
+  taskTemplate         TaskTemplate?       @relation(fields: [taskTemplateId], references: [id])
+  unlockConditionType  UnlockConditionType @map("unlock_condition_type")
+  unlockConditionValue String              @map("unlock_condition_value") // JSON
+  createdAt            DateTime            @default(now()) @map("created_at")
+
+  @@map("reward_assignments")
+}
+
+model RewardUnlock {
+  id           Int        @id @default(autoincrement())
+  rewardId     Int        @map("reward_id")
+  reward       Reward     @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  roomMemberId Int        @map("room_member_id")
+  roomMember   RoomMember @relation(fields: [roomMemberId], references: [id])
+  unlockedAt   DateTime   @default(now()) @map("unlocked_at")
+
+  @@unique([rewardId, roomMemberId])
+  @@map("reward_unlocks")
+}
+
+model StreakRecord {
+  id                  Int        @id @default(autoincrement())
+  roomId              Int        @map("room_id")
+  room                Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomMemberId        Int        @map("room_member_id")
+  roomMember          RoomMember @relation(fields: [roomMemberId], references: [id])
+  streakType          String     @map("streak_type")
+  currentStreak       Int        @default(0) @map("current_streak")
+  longestStreak       Int        @default(0) @map("longest_streak")
+  lastActiveLocalDate String?    @map("last_active_local_date")
+  updatedAt           DateTime   @updatedAt @map("updated_at")
+
+  @@unique([roomId, roomMemberId, streakType])
+  @@map("streak_records")
+}
+
+model RescueVoucherUsage {
+  id            Int        @id @default(autoincrement())
+  roomMemberId  Int        @map("room_member_id")
+  roomMember    RoomMember @relation(fields: [roomMemberId], references: [id])
+  rewardId      Int        @map("reward_id")
+  reward        Reward     @relation(fields: [rewardId], references: [id])
+  makeupForDate String     @map("makeup_for_date")
+  usedAt        DateTime   @default(now()) @map("used_at")
+
+  @@map("rescue_voucher_usages")
+}
+
+model SettlementRecord {
+  id                Int      @id @default(autoincrement())
+  roomId            Int      @map("room_id")
+  room              Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  periodStart       DateTime @map("period_start")
+  periodEnd         DateTime @map("period_end")
+  memberScores      String   @map("member_scores") // JSON
+  finalMoneyPool    Decimal  @map("final_money_pool")
+  moneyDistribution String   @map("money_distribution") // JSON
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("settlement_records")
+}
+
+model Notification {
+  id                Int              @id @default(autoincrement())
+  roomId            Int              @map("room_id")
+  room              Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomMemberId      Int              @map("room_member_id")
+  roomMember        RoomMember       @relation(fields: [roomMemberId], references: [id])
+  type              NotificationType
+  relatedEntityType String?          @map("related_entity_type")
+  relatedEntityId   Int?             @map("related_entity_id")
+  isRead            Boolean          @default(false) @map("is_read")
+  createdAt         DateTime         @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+model IconAsset {
+  id             Int          @id @default(autoincrement())
+  roomId         Int?         @map("room_id")
+  room           Room?        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  category       IconCategory
+  name           String
+  frameImageUrls String       @map("frame_image_urls") // JSON array, 1-4 paths
+  createdById    Int?         @map("created_by")
+  createdBy      RoomMember?  @relation(fields: [createdById], references: [id])
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  taskTemplates TaskTemplate[]
+
+  @@map("icon_assets")
+}
+
+model AuditLog {
+  id                Int         @id @default(autoincrement())
+  roomId            Int         @map("room_id")
+  room              Room        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  actorRoomMemberId Int?        @map("actor_room_member_id")
+  actorRoomMember   RoomMember? @relation(fields: [actorRoomMemberId], references: [id])
+  actionType        String      @map("action_type")
+  targetEntityType  String      @map("target_entity_type")
+  targetEntityId    Int         @map("target_entity_id")
+  changeSummary     String      @map("change_summary") // JSON
+  createdAt         DateTime    @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}
