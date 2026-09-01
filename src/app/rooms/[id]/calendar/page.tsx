@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
-import type { CalendarDTO, MemberDTO } from "@/lib/types";
+import type { CalendarDayDTO, CalendarDTO, MemberDTO } from "@/lib/types";
 
 function currentMonth() {
   return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit" })
@@ -25,6 +25,7 @@ export default function CalendarPage({ params }: { params: Promise<{ id: string 
   const [month, setMonth] = useState(currentMonth());
   const [calendar, setCalendar] = useState<CalendarDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<CalendarDayDTO | null>(null);
 
   async function loadMembers() {
     try {
@@ -104,7 +105,10 @@ export default function CalendarPage({ params }: { params: Promise<{ id: string 
           return (
             <div
               key={dateStr}
-              className="relative flex aspect-square flex-col items-center justify-center rounded-lg border border-slate-200 bg-white p-1"
+              onClick={() => day?.producedStamp && setSelectedDay(day)}
+              className={`relative flex aspect-square flex-col items-center justify-center rounded-lg border border-slate-200 bg-white p-1 ${
+                day?.producedStamp ? "cursor-pointer hover:border-slate-400" : ""
+              }`}
             >
               <span className="absolute left-1 top-1 text-[10px] text-slate-400">{dayNum}</span>
               {day?.producedStamp ? (
@@ -144,6 +148,104 @@ export default function CalendarPage({ params }: { params: Promise<{ id: string 
         {viewMemberId !== myId && "鎖住的郵票代表對方尚未解鎖，只有本人與已解鎖者能看到完整內容。"}
         {viewMemberId !== myId && nameById.get(viewMemberId ?? -1)}
       </p>
+
+      {selectedDay?.producedStamp && (
+        <StampDetailModal
+          stamp={selectedDay.producedStamp}
+          isOwner={viewMemberId === myId}
+          roomId={roomId}
+          onClose={() => setSelectedDay(null)}
+          onShared={() => {
+            loadCalendar();
+            setSelectedDay(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function StampDetailModal({
+  stamp,
+  isOwner,
+  roomId,
+  onClose,
+  onShared,
+}: {
+  stamp: NonNullable<CalendarDayDTO["producedStamp"]>;
+  isOwner: boolean;
+  roomId: number;
+  onClose: () => void;
+  onShared: () => void;
+}) {
+  const [sharing, setSharing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function share() {
+    setSharing(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/rooms/${roomId}/rewards/share`, {
+        method: "POST",
+        body: JSON.stringify({ rewardId: stamp.rewardId }),
+      });
+      onShared();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "分享失敗");
+      setSharing(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between">
+          <h2 className="text-lg font-bold">{stamp.title}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            ✕
+          </button>
+        </div>
+
+        {!stamp.unlocked ? (
+          <p className="text-sm text-slate-500">🔒 對方尚未把這則成果分享給你。</p>
+        ) : (
+          <div className="space-y-3">
+            {stamp.contentText && <p className="whitespace-pre-wrap text-sm text-slate-700">{stamp.contentText}</p>}
+            {stamp.contentImageUrls && stamp.contentImageUrls.length > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                {stamp.contentImageUrls.map((url, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={i} src={url} alt="" className="aspect-square w-full rounded-lg object-cover" />
+                ))}
+              </div>
+            )}
+            {!stamp.contentText && (!stamp.contentImageUrls || stamp.contentImageUrls.length === 0) && (
+              <p className="text-sm text-slate-400">這則完成紀錄沒有留下文字或照片。</p>
+            )}
+          </div>
+        )}
+
+        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+        {isOwner && stamp.unlocked && (
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            {stamp.sharedWithPartner ? (
+              <p className="text-xs text-emerald-600">✓ 已分享給對方查看</p>
+            ) : (
+              <button
+                onClick={share}
+                disabled={sharing}
+                className="w-full rounded-lg bg-slate-900 py-2 text-sm text-white disabled:opacity-50"
+              >
+                {sharing ? "分享中…" : "分享給對方查看"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -25,6 +25,7 @@ const ENTITY_LINK: Record<string, (roomId: number) => string> = {
   TaskApprovalRequest: (roomId) => `/rooms/${roomId}/approvals`,
   RoomCreationDraft: (roomId) => `/rooms/${roomId}/draft`,
   Reward: (roomId) => `/rooms/${roomId}/rewards`,
+  Calendar: (roomId) => `/rooms/${roomId}/calendar`,
 };
 
 export default function NotificationsPage({ params }: { params: Promise<{ id: string }> }) {

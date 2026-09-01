@@ -55,6 +55,25 @@ export async function GET(req: Request, ctx: RouteContext<"/api/rooms/[id]/calen
 
     const isOwner = viewer.id === targetMemberId;
 
+    // Only meaningful (and only computed) when the viewer is looking at
+    // their own calendar — it drives the "share with partner" action, so
+    // it needs to reflect whether the *partner* already has an unlock,
+    // not the viewer.
+    let partnerUnlockedRewardIds = new Set<number>();
+    if (isOwner) {
+      const rewardIds = completions.filter((c) => c.reward).map((c) => c.reward!.id);
+      if (rewardIds.length > 0) {
+        partnerUnlockedRewardIds = new Set(
+          (
+            await db.rewardUnlock.findMany({
+              where: { rewardId: { in: rewardIds }, roomMemberId: { not: viewer.id } },
+              select: { rewardId: true },
+            })
+          ).map((u) => u.rewardId)
+        );
+      }
+    }
+
     const byDate = new Map<
       string,
       {
@@ -66,6 +85,7 @@ export async function GET(req: Request, ctx: RouteContext<"/api/rooms/[id]/calen
           unlocked: boolean;
           contentText: string | null;
           contentImageUrls: string[] | null;
+          sharedWithPartner?: boolean;
         } | null;
       }
     >();
@@ -85,6 +105,7 @@ export async function GET(req: Request, ctx: RouteContext<"/api/rooms/[id]/calen
           unlocked,
           contentText: unlocked ? c.reward.contentText : null,
           contentImageUrls: unlocked && c.reward.contentImageUrls ? JSON.parse(c.reward.contentImageUrls) : null,
+          ...(isOwner ? { sharedWithPartner: partnerUnlockedRewardIds.has(c.reward.id) } : {}),
         };
       } else {
         day.stamps.push({
