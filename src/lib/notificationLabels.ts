@@ -15,6 +15,7 @@ export const NOTIFICATION_LABEL: Record<$Enums.NotificationType, string> = {
   reward_stock_exhausted: "獎勵已兌換完畢",
   reward_redeem_requested: "對方想要兌換一個獎勵",
   reward_redeemed: "你的獎勵兌換已確認完成",
+  reward_stamp_reacted: "對方在你的照片印章上有新留言/反應",
   settlement_upcoming: "即將結算",
   streak_breaking_soon: "連續天數即將中斷",
   money_topped_up: "獎金池已加碼",

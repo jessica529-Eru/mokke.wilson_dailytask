@@ -111,6 +111,7 @@ enum NotificationType {
   reward_stock_exhausted
   reward_redeem_requested
   reward_redeemed
+  reward_stamp_reacted
   settlement_upcoming
   streak_breaking_soon
   money_topped_up
@@ -171,6 +172,8 @@ model RoomMember {
   approvalRequests      TaskApprovalRequest[] @relation("ApprovalRequestedBy")
   createdRewards        Reward[]              @relation("RewardCreatedBy")
   rewardUnlocks         RewardUnlock[]
+  rewardComments        RewardComment[]
+  rewardReactions       RewardReaction[]
   streakRecords         StreakRecord[]
   rescueVoucherUsages   RescueVoucherUsage[]
   notifications         Notification[]
@@ -318,6 +321,8 @@ model Reward {
   unlocks                RewardUnlock[]
   taskCompletionsAwarded TaskCompletion[]
   rescueVoucherUsages    RescueVoucherUsage[]
+  comments               RewardComment[]
+  reactions              RewardReaction[]
 
   @@map("rewards")
 }
@@ -355,6 +360,36 @@ model RewardUnlock {
 
   @@unique([rewardId, roomMemberId])
   @@map("reward_unlocks")
+}
+
+// Lightweight engagement on a produced_content photo stamp (section 6) —
+// only meaningful once the viewer can actually see it (its own creator, or
+// someone who has unlocked it), same visibility rule as the content itself.
+model RewardComment {
+  id           Int        @id @default(autoincrement())
+  rewardId     Int        @map("reward_id")
+  reward       Reward     @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  roomMemberId Int        @map("room_member_id")
+  roomMember   RoomMember @relation(fields: [roomMemberId], references: [id])
+  text         String
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@map("reward_comments")
+}
+
+// One heart per member per reward — a toggle, not a tally (unique index
+// enforces "at most one").
+model RewardReaction {
+  id           Int        @id @default(autoincrement())
+  rewardId     Int        @map("reward_id")
+  reward       Reward     @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  roomMemberId Int        @map("room_member_id")
+  roomMember   RoomMember @relation(fields: [roomMemberId], references: [id])
+  emoji        String     @default("❤️")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@unique([rewardId, roomMemberId])
+  @@map("reward_reactions")
 }
 
 model StreakRecord {

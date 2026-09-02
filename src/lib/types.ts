@@ -154,6 +154,14 @@ export type RewardDTO = {
   createdAt: string;
 };
 
+export type RewardCommentDTO = {
+  id: number;
+  text: string;
+  roomMemberId: number;
+  nickname: string;
+  createdAt: string;
+};
+
 export type NotificationDTO = {
   id: number;
   type: string;

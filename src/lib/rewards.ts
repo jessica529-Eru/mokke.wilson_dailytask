@@ -102,6 +102,20 @@ async function isConditionMet(
   return false;
 }
 
+// Same visibility rule as a reward's own content (see the rewards GET
+// route): the creator always sees it, everyone else only once they've
+// unlocked it. Shared by the comment/heart routes so a reaction can't leak
+// what the content itself is still hiding.
+export async function canViewRewardContent(rewardId: number, roomMemberId: number): Promise<boolean> {
+  const reward = await db.reward.findUnique({ where: { id: rewardId } });
+  if (!reward) return false;
+  if (reward.createdById === roomMemberId) return true;
+  const unlock = await db.rewardUnlock.findUnique({
+    where: { rewardId_roomMemberId: { rewardId, roomMemberId } },
+  });
+  return !!unlock;
+}
+
 export async function notifyRewardUnlocks(roomId: number, roomMemberId: number, rewardIds: number[]) {
   await Promise.all(
     rewardIds.map((rewardId) =>

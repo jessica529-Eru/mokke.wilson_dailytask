@@ -3,7 +3,7 @@
 import { useEffect, useState, use as usePromise } from "react";
 import { apiFetch, ApiClientError } from "@/lib/apiClient";
 import { ConditionPicker, type UnlockCondition } from "@/components/ConditionPicker";
-import type { CalendarDayDTO, CalendarDTO, MemberDTO, TaskTemplateDTO } from "@/lib/types";
+import type { CalendarDayDTO, CalendarDTO, MemberDTO, RewardCommentDTO, TaskTemplateDTO } from "@/lib/types";
 
 function currentMonth() {
   return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit" })
@@ -190,6 +190,59 @@ function StampDetailModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [comments, setComments] = useState<RewardCommentDTO[]>([]);
+  const [heartCount, setHeartCount] = useState(0);
+  const [myHearted, setMyHearted] = useState(false);
+  const [newComment, setNewComment] = useState("");
+
+  async function loadComments() {
+    try {
+      const data = await apiFetch<{ comments: RewardCommentDTO[]; heartCount: number; myHearted: boolean }>(
+        `/api/rooms/${roomId}/rewards/${stamp.rewardId}/comments`
+      );
+      setComments(data.comments);
+      setHeartCount(data.heartCount);
+      setMyHearted(data.myHearted);
+    } catch {
+      // Best-effort — comments are secondary to the stamp content itself,
+      // not worth surfacing an error banner over.
+    }
+  }
+
+  useEffect(() => {
+    if (!stamp.unlocked) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadComments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stamp.rewardId, stamp.unlocked]);
+
+  async function toggleHeart() {
+    try {
+      const data = await apiFetch<{ hearted: boolean; heartCount: number }>(
+        `/api/rooms/${roomId}/rewards/${stamp.rewardId}/heart`,
+        { method: "POST" }
+      );
+      setMyHearted(data.hearted);
+      setHeartCount(data.heartCount);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "操作失敗");
+    }
+  }
+
+  async function submitComment() {
+    if (!newComment.trim()) return;
+    try {
+      await apiFetch(`/api/rooms/${roomId}/rewards/${stamp.rewardId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ text: newComment }),
+      });
+      setNewComment("");
+      loadComments();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "留言失敗");
+    }
+  }
+
   async function submitCondition() {
     if (!condition) return;
     setSubmitting(true);
@@ -238,6 +291,38 @@ function StampDetailModal({
             {!stamp.contentText && (!stamp.contentImageUrls || stamp.contentImageUrls.length === 0) && (
               <p className="text-sm text-slate-400">這則完成紀錄沒有留下文字或照片。</p>
             )}
+
+            <div className="border-t border-slate-100 pt-3">
+              <button
+                onClick={toggleHeart}
+                className={`flex items-center gap-1 rounded-full border px-3 py-1 text-sm ${
+                  myHearted ? "border-rose-300 bg-rose-50 text-rose-600" : "border-slate-300 text-slate-500"
+                }`}
+              >
+                {myHearted ? "❤️" : "🤍"} {heartCount > 0 && heartCount}
+              </button>
+              <div className="mt-3 space-y-2">
+                {comments.map((c) => (
+                  <div key={c.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                    <span className="font-medium">{c.nickname}</span>
+                    <span className="ml-2 text-slate-600">{c.text}</span>
+                  </div>
+                ))}
+                {comments.length === 0 && <p className="text-xs text-slate-400">還沒有留言</p>}
+              </div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                  placeholder="留言…"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitComment()}
+                />
+                <button onClick={submitComment} className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm text-white">
+                  送出
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
