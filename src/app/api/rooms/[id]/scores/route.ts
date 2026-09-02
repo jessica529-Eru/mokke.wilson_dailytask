@@ -4,6 +4,7 @@ import { requireRoomMember } from "@/lib/currentMember";
 import { handleApiError } from "@/lib/api";
 import { getCurrentMoneyPool } from "@/lib/money";
 import { runSettlementIfDue, getCurrentPeriodStart } from "@/lib/settlement";
+import { checkDailyReminders } from "@/lib/reminders";
 
 // Powers the always-on home tug-of-war (section 4): live score ratio, money
 // pool, and a "if we settled right now" preview — explicitly not a real
@@ -16,6 +17,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/scor
     await requireRoomMember(roomId);
 
     await runSettlementIfDue(roomId);
+    await checkDailyReminders(roomId);
     const periodStart = await getCurrentPeriodStart(roomId);
 
     const room = await db.room.findUniqueOrThrow({
