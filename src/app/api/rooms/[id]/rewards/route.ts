@@ -34,7 +34,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/rewa
       // Every unlock is fetched (not just the viewer's own) so a
       // creator can see when someone else has a pending redemption
       // request against a reward they created.
-      include: { unlocks: { include: { roomMember: true } }, createdBy: true },
+      include: { unlocks: { include: { roomMember: true } }, createdBy: true, assignments: true },
     });
 
     return NextResponse.json({
@@ -59,6 +59,12 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/rewa
             ? { roomMemberId: pendingRequest.roomMemberId, nickname: pendingRequest.roomMember.displayNickname }
             : null,
           archived: r.archived,
+          // Distinguishes "nobody's met the condition yet" (still worth
+          // showing as a goal) from "no condition was ever set, so this
+          // can never unlock for anyone" — the latter used to render with
+          // the exact same "🔒 尚未解鎖" label, which reads as achievable
+          // when it structurally isn't.
+          hasUnlockCondition: r.assignments.length > 0,
           // The creator wrote this content, so hiding it from them too
           // (on top of hiding it from a partner who hasn't unlocked it
           // yet) would only get in their own way — e.g. when editing.

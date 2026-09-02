@@ -40,6 +40,9 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
   const [editContentText, setEditContentText] = useState("");
   const [editContentImageUrls, setEditContentImageUrls] = useState<string[]>([]);
   const [editStockTotal, setEditStockTotal] = useState<number | "">("");
+  const [myRewardsOpen, setMyRewardsOpen] = useState(true);
+  const [selectedCatalogRewardId, setSelectedCatalogRewardId] = useState<number | null>(null);
+  const [editCondition, setEditCondition] = useState<UnlockCondition | undefined>(undefined);
 
   async function load() {
     try {
@@ -113,6 +116,21 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
     setEditContentText(r.contentText ?? "");
     setEditContentImageUrls(r.contentImageUrls ?? []);
     setEditStockTotal(r.stockTotal ?? "");
+    setEditCondition(undefined);
+  }
+
+  async function submitEditCondition(rewardId: number) {
+    if (!editCondition) return;
+    try {
+      await apiFetch(`/api/rooms/${roomId}/rewards/assignment`, {
+        method: "POST",
+        body: JSON.stringify({ rewardId, ...editCondition }),
+      });
+      setEditCondition(undefined);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "設定失敗");
+    }
   }
 
   async function submitEditReward(rewardId: number) {
@@ -202,13 +220,22 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
       {(() => {
         const myRewards = rewards.filter((r) => r.unlocked);
         return (
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-slate-600">我的獎勵</h2>
-            {myRewards.length === 0 ? (
-              <p className="text-sm text-slate-400">你目前還沒有解鎖任何獎勵。</p>
-            ) : (
-              <ul className="space-y-3">{myRewards.map(renderRewardCard)}</ul>
-            )}
+          <section>
+            <button
+              onClick={() => setMyRewardsOpen((v) => !v)}
+              className="flex w-full items-center justify-between rounded-lg bg-slate-100 px-3 py-2 text-left text-sm font-semibold text-slate-700"
+            >
+              <span>
+                我的獎勵 <span className="font-normal text-slate-400">（{myRewards.length}）</span>
+              </span>
+              <span className="text-slate-400">{myRewardsOpen ? "收合 ▲" : "展開 ▼"}</span>
+            </button>
+            {myRewardsOpen &&
+              (myRewards.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-400">你目前還沒有解鎖任何獎勵。</p>
+              ) : (
+                <ul className="mt-3 space-y-3">{myRewards.map(renderRewardCard)}</ul>
+              ))}
           </section>
         );
       })()}
@@ -227,19 +254,64 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
           if (r.archived) return false;
           return !(r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0);
         });
+        const selected = catalogRewards.find((r) => r.id === selectedCatalogRewardId);
         return (
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-slate-600">獎勵庫（目前有哪些）</h2>
             {catalogRewards.length === 0 ? (
               <p className="text-sm text-slate-400">目前沒有獎勵</p>
             ) : (
-              <ul className="space-y-3">{catalogRewards.map(renderRewardCard)}</ul>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {catalogRewards.map((r) => renderRewardTile(r))}
+              </div>
+            )}
+            {selected && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                onClick={() => setSelectedCatalogRewardId(null)}
+              >
+                <div className="max-h-[85vh] w-full max-w-sm overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                  <ul>{renderRewardCard(selected)}</ul>
+                  <button
+                    onClick={() => setSelectedCatalogRewardId(null)}
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white py-2 text-sm"
+                  >
+                    關閉
+                  </button>
+                </div>
+              </div>
             )}
           </section>
         );
       })()}
     </div>
   );
+
+  function renderRewardTile(r: RewardDTO) {
+    const stockExhausted = r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0;
+    const icon = r.type === "rescue_voucher" ? "🎫" : r.type === "fixed_item" ? "🎁" : "❔";
+    return (
+      <button
+        key={r.id}
+        onClick={() => setSelectedCatalogRewardId(r.id)}
+        className="relative flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white p-2 text-center hover:border-slate-400"
+      >
+        {r.pendingRedemptionFrom && (
+          <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-amber-500" title="有人提出兌換請求" />
+        )}
+        <span className="text-2xl">{icon}</span>
+        <span className="line-clamp-2 text-[11px] font-medium leading-tight text-slate-700">{r.title}</span>
+        {r.stockTotal !== null && (
+          <span className="text-[10px] text-slate-400">
+            {r.stockRemaining}/{r.stockTotal}
+          </span>
+        )}
+        {r.archived && <span className="text-[10px] text-slate-400">已下架</span>}
+        {!r.archived && stockExhausted && <span className="text-[10px] text-red-500">已用完</span>}
+        {!r.unlocked && <span className="text-[10px] text-slate-400">{r.hasUnlockCondition ? "🔒 未解鎖" : "尚未設定領取方式"}</span>}
+      </button>
+    );
+  }
 
   function renderRewardCard(r: RewardDTO) {
     const creatorColor = colorByMemberId.get(r.createdById);
@@ -303,9 +375,13 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
                     使用補救券
                   </button>
                 )
-              ) : (
+              ) : r.hasUnlockCondition ? (
                 <span className="text-xs text-slate-400" title="只有達成解鎖條件的本人才能使用">
                   🔒 尚未解鎖
+                </span>
+              ) : (
+                <span className="text-xs text-slate-400" title="建立者還沒有設定這張券要怎麼領取">
+                  尚未設定領取方式
                 </span>
               )
             ) : r.unlocked && canRedeem ? (
@@ -326,7 +402,7 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
               )
             ) : !r.pendingRedemptionFrom ? (
               <span className={`text-xs ${r.unlocked ? "text-emerald-600" : "text-slate-400"}`}>
-                {r.unlocked ? "已解鎖" : "🔒 未解鎖"}
+                {r.unlocked ? "已解鎖" : r.hasUnlockCondition ? "🔒 未解鎖" : "尚未設定領取方式"}
               </span>
             ) : null}
           </div>
@@ -379,6 +455,19 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
                 onChange={(e) => setEditStockTotal(e.target.value === "" ? "" : Number(e.target.value))}
               />
             </label>
+            {!r.hasUnlockCondition && (
+              <div className="rounded-lg bg-amber-50 p-2">
+                <p className="mb-1 text-xs text-amber-700">這個獎勵還沒有設定解鎖條件，不會自動解鎖給任何人。</p>
+                <ConditionPicker tasks={tasks} onChange={setEditCondition} />
+                <button
+                  onClick={() => submitEditCondition(r.id)}
+                  disabled={!editCondition}
+                  className="mt-2 rounded-lg bg-slate-900 px-3 py-1.5 text-xs text-white disabled:opacity-40"
+                >
+                  設定解鎖條件
+                </button>
+              </div>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={() => setEditingRewardId(null)}
@@ -499,6 +588,11 @@ function NewRewardForm({
       <div>
         <div className="mb-1 text-xs text-slate-500">解鎖條件（選填）</div>
         <ConditionPicker tasks={tasks} onChange={setAssignment} />
+        {!assignment && (
+          <p className="mt-1 text-xs text-amber-600">
+            不設定的話，這個獎勵不會自動解鎖給任何人，之後可以到獎勵庫編輯補上。
+          </p>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
