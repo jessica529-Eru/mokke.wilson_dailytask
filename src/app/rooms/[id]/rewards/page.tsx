@@ -35,6 +35,11 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
   const [showForm, setShowForm] = useState(false);
   const [redeemingRewardId, setRedeemingRewardId] = useState<number | null>(null);
   const [makeupDate, setMakeupDate] = useState("");
+  const [editingRewardId, setEditingRewardId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContentText, setEditContentText] = useState("");
+  const [editContentImageUrls, setEditContentImageUrls] = useState<string[]>([]);
+  const [editStockTotal, setEditStockTotal] = useState<number | "">("");
 
   async function load() {
     try {
@@ -99,6 +104,44 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
       load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "確認兌換失敗");
+    }
+  }
+
+  function startEditReward(r: RewardDTO) {
+    setEditingRewardId(r.id);
+    setEditTitle(r.title);
+    setEditContentText(r.contentText ?? "");
+    setEditContentImageUrls(r.contentImageUrls ?? []);
+    setEditStockTotal(r.stockTotal ?? "");
+  }
+
+  async function submitEditReward(rewardId: number) {
+    try {
+      await apiFetch(`/api/rooms/${roomId}/rewards/${rewardId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: editTitle,
+          contentText: editContentText,
+          contentImageUrls: editContentImageUrls,
+          stockTotal: editStockTotal === "" ? null : editStockTotal,
+        }),
+      });
+      setEditingRewardId(null);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "編輯失敗");
+    }
+  }
+
+  async function toggleArchiveReward(r: RewardDTO) {
+    try {
+      await apiFetch(`/api/rooms/${roomId}/rewards/${r.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ archived: !r.archived }),
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "操作失敗");
     }
   }
 
@@ -179,9 +222,11 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
         // Exception: a reward the creator still needs to confirm delivery
         // on stays visible here even at zero stock — hiding it would hide
         // the only place that "確認交付" button appears for them.
-        const catalogRewards = rewards.filter(
-          (r) => !(r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0) || r.pendingRedemptionFrom
-        );
+        const catalogRewards = rewards.filter((r) => {
+          if (r.pendingRedemptionFrom) return true;
+          if (r.archived) return false;
+          return !(r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0);
+        });
         return (
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-slate-600">獎勵庫（目前有哪些）</h2>
@@ -200,6 +245,8 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
     const creatorColor = colorByMemberId.get(r.createdById);
     const stockExhausted = r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0;
     const canRedeem = r.type === "fixed_item" || r.type === "other";
+    const isMine = r.createdById === myId;
+    const isEditing = editingRewardId === r.id;
     return (
       <li
         key={r.id}
@@ -217,9 +264,26 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
               {r.type !== "rescue_voucher" && ` · 由 ${r.createdByNickname} 提供`}
               {r.stockTotal !== null && ` · 庫存 ${r.stockRemaining}/${r.stockTotal}`}
               {stockExhausted && <span className="ml-1 text-red-500">· 🚫 庫存已用完</span>}
+              {r.archived && <span className="ml-1 text-slate-400">· 已下架</span>}
             </span>
           </div>
           <div className="flex flex-col items-end gap-1">
+            {isMine && !isEditing && (
+              <div className="flex gap-1">
+                <button
+                  onClick={() => startEditReward(r)}
+                  className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs text-slate-600"
+                >
+                  編輯
+                </button>
+                <button
+                  onClick={() => toggleArchiveReward(r)}
+                  className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs text-slate-600"
+                >
+                  {r.archived ? "取消下架" : "下架"}
+                </button>
+              </div>
+            )}
             {r.pendingRedemptionFrom && (
               <button
                 onClick={() => confirmRedeem(r.id)}
@@ -289,14 +353,59 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
             </button>
           </div>
         )}
-        {r.unlocked && r.contentText && <p className="mt-2 text-sm text-slate-600">{r.contentText}</p>}
-        {r.unlocked && r.contentImageUrls && r.contentImageUrls.length > 0 && (
-          <div className="mt-2 space-y-2">
-            {r.contentImageUrls.map((url, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img key={i} src={url} alt="" className="w-full rounded-lg object-contain" />
-            ))}
+        {isEditing ? (
+          <div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-2">
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              placeholder="獎勵名稱"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+            />
+            <textarea
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              placeholder="獎勵內容說明"
+              rows={2}
+              value={editContentText}
+              onChange={(e) => setEditContentText(e.target.value)}
+            />
+            <MultiImageUploadField value={editContentImageUrls} onChange={setEditContentImageUrls} />
+            <label className="flex items-center gap-2 text-sm">
+              庫存（留白 = 不限）
+              <input
+                type="number"
+                min={1}
+                className="w-20 rounded-lg border border-slate-300 px-2 py-1"
+                value={editStockTotal}
+                onChange={(e) => setEditStockTotal(e.target.value === "" ? "" : Number(e.target.value))}
+              />
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditingRewardId(null)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => submitEditReward(r.id)}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm text-white"
+              >
+                儲存
+              </button>
+            </div>
           </div>
+        ) : (
+          <>
+            {r.unlocked && r.contentText && <p className="mt-2 text-sm text-slate-600">{r.contentText}</p>}
+            {r.unlocked && r.contentImageUrls && r.contentImageUrls.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {r.contentImageUrls.map((url, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={i} src={url} alt="" className="w-full rounded-lg object-contain" />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </li>
     );

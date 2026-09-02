@@ -183,6 +183,7 @@ export default function TasksPage({ params }: { params: Promise<{ id: string }> 
           tasks={tasksBySection[section]}
           allTasks={tasks}
           rewards={rewards}
+          icons={icons}
           roomId={roomId}
           myId={myId}
           members={members}
@@ -198,6 +199,7 @@ function TaskSection({
   tasks,
   allTasks,
   rewards,
+  icons,
   roomId,
   myId,
   members,
@@ -207,6 +209,7 @@ function TaskSection({
   tasks: TaskTemplateDTO[];
   allTasks: TaskTemplateDTO[];
   rewards: RewardDTO[];
+  icons: IconAssetDTO[];
   roomId: number;
   myId: number | null;
   members: MemberDTO[];
@@ -240,6 +243,7 @@ function TaskSection({
               members={members}
               allTasks={allTasks}
               rewards={rewards}
+              icons={icons}
               onChanged={onChanged}
             />
           ))}
@@ -377,6 +381,7 @@ function TaskRow({
   members,
   allTasks,
   rewards,
+  icons,
   onChanged,
 }: {
   task: TaskTemplateDTO;
@@ -385,6 +390,7 @@ function TaskRow({
   members: MemberDTO[];
   allTasks: TaskTemplateDTO[];
   rewards: RewardDTO[];
+  icons: IconAssetDTO[];
   onChanged: () => void;
 }) {
   const [completing, setCompleting] = useState(false);
@@ -397,6 +403,13 @@ function TaskRow({
   const [changingQuotaReward, setChangingQuotaReward] = useState(false);
   const [nextQuotaPoints, setNextQuotaPoints] = useState(task.points ?? 0);
   const [nextQuotaRewardId, setNextQuotaRewardId] = useState<number | "">("");
+
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(task.title);
+  const [editDescription, setEditDescription] = useState(task.description ?? "");
+  const [editPoints, setEditPoints] = useState(task.points ?? 0);
+  const [editRequiresProof, setEditRequiresProof] = useState(task.requiresProof);
+  const [editStampIconAssetId, setEditStampIconAssetId] = useState<number | undefined>(task.stampIcon?.id);
 
   const canComplete =
     task.status === "active" && (task.assignScope === "both" || task.assignedToId === myId);
@@ -437,6 +450,34 @@ function TaskRow({
       onChanged();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "操作失敗");
+    }
+  }
+
+  function startEdit() {
+    setEditTitle(task.title);
+    setEditDescription(task.description ?? "");
+    setEditPoints(task.points ?? 0);
+    setEditRequiresProof(task.requiresProof);
+    setEditStampIconAssetId(task.stampIcon?.id);
+    setEditing(true);
+  }
+
+  async function submitEdit() {
+    try {
+      await apiFetch(`/api/rooms/${roomId}/tasks/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: editTitle,
+          description: editDescription || undefined,
+          points: editPoints,
+          requiresProof: editRequiresProof,
+          stampIconAssetId: editStampIconAssetId,
+        }),
+      });
+      setEditing(false);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "提出修改失敗");
     }
   }
 
@@ -503,7 +544,52 @@ function TaskRow({
 
       {canComplete && (
         <div className="mt-3">
-          {completing ? (
+          {editing ? (
+            <div className="space-y-2">
+              <input
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="任務名稱"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+              <textarea
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="說明（選填）"
+                rows={2}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+              />
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <label className="flex items-center gap-2">
+                  點數
+                  <input
+                    type="number"
+                    className="w-20 rounded-lg border border-slate-300 px-2 py-1"
+                    value={editPoints}
+                    onChange={(e) => setEditPoints(Number(e.target.value))}
+                  />
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editRequiresProof}
+                    onChange={(e) => setEditRequiresProof(e.target.checked)}
+                  />
+                  需上傳照片/文字證明
+                </label>
+              </div>
+              <StampIconPicker assets={icons} value={editStampIconAssetId} onChange={setEditStampIconAssetId} />
+              <p className="text-xs text-slate-400">此修改需要對方同意才會生效，同意前任務維持原樣。</p>
+              <div className="flex gap-2">
+                <button onClick={() => setEditing(false)} className="flex-1 rounded-lg border border-slate-300 py-2 text-sm">
+                  取消
+                </button>
+                <button onClick={submitEdit} className="flex-1 rounded-lg bg-amber-600 py-2 text-sm text-white">
+                  提出修改
+                </button>
+              </div>
+            </div>
+          ) : completing ? (
             <div className="space-y-2">
               {task.requiresProof && (
                 <>
@@ -581,6 +667,9 @@ function TaskRow({
                   完成
                 </button>
               )}
+              <button onClick={startEdit} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600">
+                編輯
+              </button>
               <button onClick={requestDelete} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600">
                 提出刪除
               </button>

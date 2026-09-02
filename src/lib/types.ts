@@ -150,6 +150,7 @@ export type RewardDTO = {
   redemptionRequestedAt: string | null;
   redeemedAt: string | null;
   pendingRedemptionFrom: { roomMemberId: number; nickname: string } | null;
+  archived: boolean;
   createdAt: string;
 };
 

@@ -307,6 +307,11 @@ model Reward {
   sourceTaskCompletion   TaskCompletion? @relation("RewardSourceCompletion", fields: [sourceTaskCompletionId], references: [id])
   createdById            Int             @map("created_by")
   createdBy              RoomMember      @relation("RewardCreatedBy", fields: [createdById], references: [id])
+  // Lets the creator retake a reward off the catalog (typo, discontinued,
+  // etc.) without deleting it — anyone who already unlocked their own copy
+  // keeps seeing it under 我的獎勵, and a still-pending redemption request
+  // stays visible to the creator so "確認交付" isn't hidden mid-handoff.
+  archived               Boolean         @default(false)
   createdAt              DateTime        @default(now()) @map("created_at")
 
   assignments            RewardAssignment[]

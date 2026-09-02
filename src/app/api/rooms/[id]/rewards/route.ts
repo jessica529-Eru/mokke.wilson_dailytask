@@ -58,8 +58,15 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/rewa
           pendingRedemptionFrom: pendingRequest
             ? { roomMemberId: pendingRequest.roomMemberId, nickname: pendingRequest.roomMember.displayNickname }
             : null,
-          contentText: myUnlock ? r.contentText : null,
-          contentImageUrls: myUnlock && r.contentImageUrls ? JSON.parse(r.contentImageUrls) : null,
+          archived: r.archived,
+          // The creator wrote this content, so hiding it from them too
+          // (on top of hiding it from a partner who hasn't unlocked it
+          // yet) would only get in their own way — e.g. when editing.
+          contentText: myUnlock || r.createdById === member.id ? r.contentText : null,
+          contentImageUrls:
+            (myUnlock || r.createdById === member.id) && r.contentImageUrls
+              ? JSON.parse(r.contentImageUrls)
+              : null,
           createdAt: r.createdAt,
         };
       }),
