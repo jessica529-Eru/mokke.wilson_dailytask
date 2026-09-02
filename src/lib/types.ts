@@ -163,6 +163,21 @@ export type NotificationDTO = {
   createdAt: string;
 };
 
+export type WeeklyCompletionDTO = {
+  roomMemberId: number;
+  displayNickname: string;
+  color: string;
+  completedCount: number;
+  dueCount: number;
+  rate: number;
+};
+
+export type StatsDTO = {
+  windowDays: number;
+  days: string[];
+  weeklyCompletion: WeeklyCompletionDTO[];
+};
+
 export type SettlementRecordDTO = {
   id: number;
   periodStart: string;
