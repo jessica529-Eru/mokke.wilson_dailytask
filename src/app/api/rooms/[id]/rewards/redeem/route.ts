@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireRoomMember } from "@/lib/currentMember";
+import { requireRoomMember, getPartner } from "@/lib/currentMember";
 import { ApiError, handleApiError } from "@/lib/api";
+import { notify } from "@/lib/notify";
 
 const bodySchema = z.object({ rewardId: z.number().int() });
 
@@ -39,6 +40,19 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
       where: { id: unlock.id },
       data: { redeemedAt: new Date() },
     });
+
+    // Redemption is inherently between the two of you — let the partner
+    // know it happened instead of them having to notice on their own.
+    const partner = await getPartner(roomId, member.id);
+    if (partner) {
+      await notify({
+        roomId,
+        roomMemberId: partner.id,
+        type: "reward_redeemed",
+        relatedEntityType: "Reward",
+        relatedEntityId: reward.id,
+      });
+    }
 
     return NextResponse.json({ redeemedAt: updated.redeemedAt });
   } catch (err) {

@@ -35,7 +35,6 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
   const [showForm, setShowForm] = useState(false);
   const [redeemingRewardId, setRedeemingRewardId] = useState<number | null>(null);
   const [makeupDate, setMakeupDate] = useState("");
-  const [showOnlyMine, setShowOnlyMine] = useState(false);
 
   async function load() {
     try {
@@ -145,115 +144,120 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
         />
       )}
 
-      <label className="flex items-center gap-1.5 text-xs text-slate-500">
-        <input type="checkbox" checked={showOnlyMine} onChange={(e) => setShowOnlyMine(e.target.checked)} />
-        只顯示我的獎勵（我已解鎖的）
-      </label>
+      {(() => {
+        const myRewards = rewards.filter((r) => r.unlocked);
+        return (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-slate-600">我的獎勵</h2>
+            {myRewards.length === 0 ? (
+              <p className="text-sm text-slate-400">你目前還沒有解鎖任何獎勵。</p>
+            ) : (
+              <ul className="space-y-3">{myRewards.map(renderRewardCard)}</ul>
+            )}
+          </section>
+        );
+      })()}
 
-      <ul className="space-y-3">
-        {rewards
-          .filter((r) => !showOnlyMine || r.unlocked)
-          .map((r) => {
-          const creatorColor = colorByMemberId.get(r.createdById);
-          const stockExhausted = r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0;
-          const canRedeem = r.type === "fixed_item" || r.type === "other";
-          return (
-            <li
-              key={r.id}
-              className="rounded-xl border border-slate-200 bg-white p-4 border-l-4"
-              style={{ borderLeftColor: creatorColor ?? "#e2e8f0" }}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="font-medium">{r.title}</span>
-                  <span className="ml-2 text-xs text-slate-400">
-                    {TYPE_LABEL[r.type] ?? r.type}
-                    {r.stockTotal !== null && ` · 庫存 ${r.stockRemaining}/${r.stockTotal}`}
-                    {stockExhausted && <span className="ml-1 text-red-500">· 🚫 庫存已用完</span>}
-                  </span>
-                </div>
-                {r.type === "rescue_voucher" ? (
-                  r.unlocked ? (
-                    redeemingRewardId !== r.id && (
-                      <button
-                        onClick={() => startRedeemVoucher(r.id)}
-                        disabled={r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0}
-                        className="rounded-lg bg-amber-600 px-3 py-1 text-xs text-white disabled:opacity-40"
-                      >
-                        使用補救券
-                      </button>
-                    )
-                  ) : (
-                    <span className="text-xs text-slate-400" title="只有達成解鎖條件的本人才能使用">
-                      🔒 尚未解鎖
-                    </span>
-                  )
-                ) : r.unlocked && canRedeem ? (
-                  r.redeemedAt ? (
-                    <span className="text-xs text-emerald-600" title={new Date(r.redeemedAt).toLocaleString()}>
-                      ✅ 已兌換
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => markRedeemed(r.id)}
-                      className="rounded-lg border border-emerald-300 px-3 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
-                    >
-                      標記已兌換
-                    </button>
-                  )
-                ) : (
-                  <span className={`text-xs ${r.unlocked ? "text-emerald-600" : "text-slate-400"}`}>
-                    {r.unlocked ? "已解鎖" : "🔒 未解鎖"}
-                  </span>
-                )}
-              </div>
-              {redeemingRewardId === r.id && (
-                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-2 text-xs">
-                  <label className="flex items-center gap-1.5">
-                    要回補哪一天？
-                    <input
-                      type="date"
-                      autoFocus
-                      className="rounded-lg border border-slate-300 px-2 py-1"
-                      value={makeupDate}
-                      min={earliestMakeupDate}
-                      max={today}
-                      onChange={(e) => setMakeupDate(e.target.value)}
-                    />
-                  </label>
-                  <button
-                    onClick={() => setRedeemingRewardId(null)}
-                    className="rounded-lg border border-slate-300 px-2 py-1"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={() => confirmRedeemVoucher(r.id)}
-                    className="rounded-lg bg-amber-600 px-2 py-1 text-white"
-                  >
-                    確認回補
-                  </button>
-                </div>
-              )}
-              {r.unlocked && r.contentText && <p className="mt-2 text-sm text-slate-600">{r.contentText}</p>}
-              {r.unlocked && r.contentImageUrls && r.contentImageUrls.length > 0 && (
-                <div className="mt-2 space-y-2">
-                  {r.contentImageUrls.map((url, i) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={i} src={url} alt="" className="w-full rounded-lg object-contain" />
-                  ))}
-                </div>
-              )}
-            </li>
-          );
-        })}
-        {rewards.length === 0 && <p className="text-sm text-slate-400">目前沒有獎勵</p>}
-        {rewards.length > 0 && showOnlyMine && rewards.every((r) => !r.unlocked) && (
-          <p className="text-sm text-slate-400">你目前還沒有解鎖任何獎勵。</p>
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-slate-600">獎勵庫（目前有哪些）</h2>
+        {rewards.length === 0 ? (
+          <p className="text-sm text-slate-400">目前沒有獎勵</p>
+        ) : (
+          <ul className="space-y-3">{rewards.map(renderRewardCard)}</ul>
         )}
-      </ul>
+      </section>
     </div>
   );
+
+  function renderRewardCard(r: RewardDTO) {
+    const creatorColor = colorByMemberId.get(r.createdById);
+    const stockExhausted = r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0;
+    const canRedeem = r.type === "fixed_item" || r.type === "other";
+    return (
+      <li
+        key={r.id}
+        className="rounded-xl border border-slate-200 bg-white p-4 border-l-4"
+        style={{ borderLeftColor: creatorColor ?? "#e2e8f0" }}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="font-medium">{r.title}</span>
+            <span className="ml-2 text-xs text-slate-400">
+              {TYPE_LABEL[r.type] ?? r.type} · 由 {r.createdByNickname} 提供
+              {r.stockTotal !== null && ` · 庫存 ${r.stockRemaining}/${r.stockTotal}`}
+              {stockExhausted && <span className="ml-1 text-red-500">· 🚫 庫存已用完</span>}
+            </span>
+          </div>
+          {r.type === "rescue_voucher" ? (
+            r.unlocked ? (
+              redeemingRewardId !== r.id && (
+                <button
+                  onClick={() => startRedeemVoucher(r.id)}
+                  disabled={r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0}
+                  className="rounded-lg bg-amber-600 px-3 py-1 text-xs text-white disabled:opacity-40"
+                >
+                  使用補救券
+                </button>
+              )
+            ) : (
+              <span className="text-xs text-slate-400" title="只有達成解鎖條件的本人才能使用">
+                🔒 尚未解鎖
+              </span>
+            )
+          ) : r.unlocked && canRedeem ? (
+            r.redeemedAt ? (
+              <span className="text-xs text-emerald-600" title={new Date(r.redeemedAt).toLocaleString()}>
+                ✅ 已兌換
+              </span>
+            ) : (
+              <button
+                onClick={() => markRedeemed(r.id)}
+                className="rounded-lg border border-emerald-300 px-3 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
+                title={`標記後會通知 ${members.find((m) => m.id !== myId)?.displayNickname ?? "對方"}`}
+              >
+                標記已兌換
+              </button>
+            )
+          ) : (
+            <span className={`text-xs ${r.unlocked ? "text-emerald-600" : "text-slate-400"}`}>
+              {r.unlocked ? "已解鎖" : "🔒 未解鎖"}
+            </span>
+          )}
+        </div>
+        {redeemingRewardId === r.id && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-2 text-xs">
+            <label className="flex items-center gap-1.5">
+              要回補哪一天？
+              <input
+                type="date"
+                autoFocus
+                className="rounded-lg border border-slate-300 px-2 py-1"
+                value={makeupDate}
+                min={earliestMakeupDate}
+                max={today}
+                onChange={(e) => setMakeupDate(e.target.value)}
+              />
+            </label>
+            <button onClick={() => setRedeemingRewardId(null)} className="rounded-lg border border-slate-300 px-2 py-1">
+              取消
+            </button>
+            <button onClick={() => confirmRedeemVoucher(r.id)} className="rounded-lg bg-amber-600 px-2 py-1 text-white">
+              確認回補
+            </button>
+          </div>
+        )}
+        {r.unlocked && r.contentText && <p className="mt-2 text-sm text-slate-600">{r.contentText}</p>}
+        {r.unlocked && r.contentImageUrls && r.contentImageUrls.length > 0 && (
+          <div className="mt-2 space-y-2">
+            {r.contentImageUrls.map((url, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={i} src={url} alt="" className="w-full rounded-lg object-contain" />
+            ))}
+          </div>
+        )}
+      </li>
+    );
+  }
 }
 
 function NewRewardForm({

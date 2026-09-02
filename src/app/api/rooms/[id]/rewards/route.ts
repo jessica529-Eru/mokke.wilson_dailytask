@@ -32,7 +32,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/rewa
     const rewards = await db.reward.findMany({
       where: { roomId, type: { not: "produced_content" } },
       orderBy: { createdAt: "desc" },
-      include: { unlocks: { where: { roomMemberId: member.id } } },
+      include: { unlocks: { where: { roomMemberId: member.id } }, createdBy: true },
     });
 
     return NextResponse.json({
@@ -43,6 +43,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rooms/[id]/rewa
         stockTotal: r.stockTotal,
         stockRemaining: r.stockRemaining,
         createdById: r.createdById,
+        createdByNickname: r.createdBy.displayNickname,
         unlocked: r.unlocks.length > 0,
         redeemedAt: r.unlocks[0]?.redeemedAt ?? null,
         contentText: r.unlocks.length > 0 ? r.contentText : null,

@@ -109,6 +109,7 @@ enum NotificationType {
   task_approved
   reward_unlocked
   reward_stock_exhausted
+  reward_redeemed
   settlement_upcoming
   streak_breaking_soon
   money_topped_up

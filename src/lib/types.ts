@@ -145,6 +145,7 @@ export type RewardDTO = {
   stockTotal: number | null;
   stockRemaining: number | null;
   createdById: number;
+  createdByNickname: string;
   unlocked: boolean;
   redeemedAt: string | null;
   createdAt: string;
