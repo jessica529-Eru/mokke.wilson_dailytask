@@ -78,7 +78,7 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
     }
   }
 
-  async function markRedeemed(rewardId: number) {
+  async function requestRedeem(rewardId: number) {
     try {
       await apiFetch(`/api/rooms/${roomId}/rewards/redeem`, {
         method: "POST",
@@ -86,7 +86,19 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
       });
       load();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "標記失敗");
+      setError(err instanceof ApiClientError ? err.message : "提出兌換請求失敗");
+    }
+  }
+
+  async function confirmRedeem(rewardId: number) {
+    try {
+      await apiFetch(`/api/rooms/${roomId}/rewards/redeem/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ rewardId }),
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "確認兌換失敗");
     }
   }
 
@@ -158,14 +170,29 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
         );
       })()}
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-600">獎勵庫（目前有哪些）</h2>
-        {rewards.length === 0 ? (
-          <p className="text-sm text-slate-400">目前沒有獎勵</p>
-        ) : (
-          <ul className="space-y-3">{rewards.map(renderRewardCard)}</ul>
-        )}
-      </section>
+      {(() => {
+        // Once shared stock runs out, keep it out of the browsable catalog
+        // — it's no longer something to aim for. Anyone who already
+        // unlocked their own copy still sees it under 我的獎勵 above,
+        // regardless of stock; if more are needed later, the creator just
+        // adds a fresh reward rather than this one somehow "restocking."
+        // Exception: a reward the creator still needs to confirm delivery
+        // on stays visible here even at zero stock — hiding it would hide
+        // the only place that "確認交付" button appears for them.
+        const catalogRewards = rewards.filter(
+          (r) => !(r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0) || r.pendingRedemptionFrom
+        );
+        return (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-slate-600">獎勵庫（目前有哪些）</h2>
+            {catalogRewards.length === 0 ? (
+              <p className="text-sm text-slate-400">目前沒有獎勵</p>
+            ) : (
+              <ul className="space-y-3">{catalogRewards.map(renderRewardCard)}</ul>
+            )}
+          </section>
+        );
+      })()}
     </div>
   );
 
@@ -183,46 +210,62 @@ export default function RewardsPage({ params }: { params: Promise<{ id: string }
           <div>
             <span className="font-medium">{r.title}</span>
             <span className="ml-2 text-xs text-slate-400">
-              {TYPE_LABEL[r.type] ?? r.type} · 由 {r.createdByNickname} 提供
+              {TYPE_LABEL[r.type] ?? r.type}
+              {/* rescue_voucher is a pool tracked purely by stock count —
+                  it's not something a specific person hands over, so
+                  naming a provider doesn't mean anything for it. */}
+              {r.type !== "rescue_voucher" && ` · 由 ${r.createdByNickname} 提供`}
               {r.stockTotal !== null && ` · 庫存 ${r.stockRemaining}/${r.stockTotal}`}
               {stockExhausted && <span className="ml-1 text-red-500">· 🚫 庫存已用完</span>}
             </span>
           </div>
-          {r.type === "rescue_voucher" ? (
-            r.unlocked ? (
-              redeemingRewardId !== r.id && (
+          <div className="flex flex-col items-end gap-1">
+            {r.pendingRedemptionFrom && (
+              <button
+                onClick={() => confirmRedeem(r.id)}
+                className="rounded-lg bg-amber-600 px-3 py-1 text-xs text-white hover:bg-amber-700"
+              >
+                確認交付給 {r.pendingRedemptionFrom.nickname}
+              </button>
+            )}
+            {r.type === "rescue_voucher" ? (
+              r.unlocked ? (
+                redeemingRewardId !== r.id && (
+                  <button
+                    onClick={() => startRedeemVoucher(r.id)}
+                    disabled={r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0}
+                    className="rounded-lg bg-amber-600 px-3 py-1 text-xs text-white disabled:opacity-40"
+                  >
+                    使用補救券
+                  </button>
+                )
+              ) : (
+                <span className="text-xs text-slate-400" title="只有達成解鎖條件的本人才能使用">
+                  🔒 尚未解鎖
+                </span>
+              )
+            ) : r.unlocked && canRedeem ? (
+              r.redeemedAt ? (
+                <span className="text-xs text-emerald-600" title={new Date(r.redeemedAt).toLocaleString()}>
+                  ✅ 已兌換
+                </span>
+              ) : r.redemptionRequestedAt ? (
+                <span className="text-xs text-amber-600">⏳ 已提出兌換請求，等待對方確認</span>
+              ) : (
                 <button
-                  onClick={() => startRedeemVoucher(r.id)}
-                  disabled={r.stockTotal !== null && (r.stockRemaining ?? 0) <= 0}
-                  className="rounded-lg bg-amber-600 px-3 py-1 text-xs text-white disabled:opacity-40"
+                  onClick={() => requestRedeem(r.id)}
+                  className="rounded-lg border border-emerald-300 px-3 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
+                  title={`會通知 ${r.createdByNickname} 你想兌換`}
                 >
-                  使用補救券
+                  我要兌換
                 </button>
               )
-            ) : (
-              <span className="text-xs text-slate-400" title="只有達成解鎖條件的本人才能使用">
-                🔒 尚未解鎖
+            ) : !r.pendingRedemptionFrom ? (
+              <span className={`text-xs ${r.unlocked ? "text-emerald-600" : "text-slate-400"}`}>
+                {r.unlocked ? "已解鎖" : "🔒 未解鎖"}
               </span>
-            )
-          ) : r.unlocked && canRedeem ? (
-            r.redeemedAt ? (
-              <span className="text-xs text-emerald-600" title={new Date(r.redeemedAt).toLocaleString()}>
-                ✅ 已兌換
-              </span>
-            ) : (
-              <button
-                onClick={() => markRedeemed(r.id)}
-                className="rounded-lg border border-emerald-300 px-3 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
-                title={`標記後會通知 ${members.find((m) => m.id !== myId)?.displayNickname ?? "對方"}`}
-              >
-                標記已兌換
-              </button>
-            )
-          ) : (
-            <span className={`text-xs ${r.unlocked ? "text-emerald-600" : "text-slate-400"}`}>
-              {r.unlocked ? "已解鎖" : "🔒 未解鎖"}
-            </span>
-          )}
+            ) : null}
+          </div>
         </div>
         {redeemingRewardId === r.id && (
           <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-2 text-xs">

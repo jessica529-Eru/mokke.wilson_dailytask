@@ -109,6 +109,7 @@ enum NotificationType {
   task_approved
   reward_unlocked
   reward_stock_exhausted
+  reward_redeem_requested
   reward_redeemed
   settlement_upcoming
   streak_breaking_soon
@@ -333,9 +334,12 @@ model RewardUnlock {
   roomMemberId Int        @map("room_member_id")
   roomMember   RoomMember @relation(fields: [roomMemberId], references: [id])
   unlockedAt   DateTime   @default(now()) @map("unlocked_at")
-  // Set when the member marks a fixed_item/other reward as physically
-  // claimed (see rewards/redeem route) — separate from unlockedAt, which
-  // only means "visible/earned," not "already collected in person."
+  // Two-step handoff for fixed_item/other rewards: the person who earned
+  // it clicks "我要兌換" (sets this), then the reward's creator — the one
+  // who actually has to hand it over — confirms with "完成" (sets
+  // redeemedAt). Neither step applies to rescue_voucher (its own /use
+  // flow) or produced_content (not a library item).
+  redemptionRequestedAt DateTime? @map("redemption_requested_at")
   redeemedAt   DateTime?  @map("redeemed_at")
 
   @@unique([rewardId, roomMemberId])

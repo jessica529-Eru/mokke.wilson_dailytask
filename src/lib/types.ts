@@ -147,7 +147,9 @@ export type RewardDTO = {
   createdById: number;
   createdByNickname: string;
   unlocked: boolean;
+  redemptionRequestedAt: string | null;
   redeemedAt: string | null;
+  pendingRedemptionFrom: { roomMemberId: number; nickname: string } | null;
   createdAt: string;
 };
 

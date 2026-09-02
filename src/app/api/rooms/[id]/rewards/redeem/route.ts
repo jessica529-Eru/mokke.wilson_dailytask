@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireRoomMember, getPartner } from "@/lib/currentMember";
+import { requireRoomMember } from "@/lib/currentMember";
 import { ApiError, handleApiError } from "@/lib/api";
 import { notify } from "@/lib/notify";
 
 const bodySchema = z.object({ rewardId: z.number().int() });
 
-// Marks a reward as physically/privately claimed — separate from
-// "unlocked" (RewardUnlock.unlockedAt, which only means earned/visible).
-// Scoped to fixed_item/other: rescue_voucher already has its own use flow
-// (rescue-vouchers/use), and produced_content isn't a library item at all.
+// Step 1 of a two-step handoff for fixed_item/other rewards: the person
+// who unlocked it says "我要兌換" here, which just notifies the reward's
+// creator — the person who actually has to hand it over. They're the one
+// who confirms completion (see redeem/confirm), not the redeemer
+// themselves; self-marking "done" for something someone else has to give
+// you doesn't actually confirm anything happened.
+// rescue_voucher has its own use flow (rescue-vouchers/use); produced_content
+// isn't a library item at all.
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/rewards/redeem">) {
   try {
     const { id } = await ctx.params;
@@ -33,28 +37,26 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
       throw new ApiError(403, "尚未解鎖這個獎勵");
     }
     if (unlock.redeemedAt) {
-      throw new ApiError(409, "這個獎勵已經標記為兌換過了");
+      throw new ApiError(409, "這個獎勵已經兌換過了");
+    }
+    if (unlock.redemptionRequestedAt) {
+      throw new ApiError(409, "已經提出兌換請求，等待對方確認");
     }
 
     const updated = await db.rewardUnlock.update({
       where: { id: unlock.id },
-      data: { redeemedAt: new Date() },
+      data: { redemptionRequestedAt: new Date() },
     });
 
-    // Redemption is inherently between the two of you — let the partner
-    // know it happened instead of them having to notice on their own.
-    const partner = await getPartner(roomId, member.id);
-    if (partner) {
-      await notify({
-        roomId,
-        roomMemberId: partner.id,
-        type: "reward_redeemed",
-        relatedEntityType: "Reward",
-        relatedEntityId: reward.id,
-      });
-    }
+    await notify({
+      roomId,
+      roomMemberId: reward.createdById,
+      type: "reward_redeem_requested",
+      relatedEntityType: "Reward",
+      relatedEntityId: reward.id,
+    });
 
-    return NextResponse.json({ redeemedAt: updated.redeemedAt });
+    return NextResponse.json({ redemptionRequestedAt: updated.redemptionRequestedAt });
   } catch (err) {
     return handleApiError(err);
   }
