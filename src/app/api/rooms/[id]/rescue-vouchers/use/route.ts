@@ -56,11 +56,18 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
       });
       let exhausted = false;
       if (reward.stockTotal !== null) {
-        const updated = await tx.reward.update({
-          where: { id: reward.id },
+        // Guarded decrement — the pre-transaction stockRemaining check
+        // above is only a fast-path hint; this is what actually stops
+        // two concurrent redemptions from taking stock below zero.
+        const updated = await tx.reward.updateMany({
+          where: { id: reward.id, stockRemaining: { gt: 0 } },
           data: { stockRemaining: { decrement: 1 } },
         });
-        exhausted = (updated.stockRemaining ?? 0) <= 0;
+        if (updated.count === 0) {
+          throw new ApiError(409, "補救券庫存不足");
+        }
+        const fresh = await tx.reward.findUniqueOrThrow({ where: { id: reward.id } });
+        exhausted = (fresh.stockRemaining ?? 0) <= 0;
       }
       await recomputeAnyDailyStreak(tx, { roomId, roomMemberId: member.id });
       return { exhausted };

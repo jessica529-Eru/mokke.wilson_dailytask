@@ -74,15 +74,24 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
           proofText: body.proofText,
           proofImageUrls: body.proofImageUrls ? JSON.stringify(body.proofImageUrls) : undefined,
           pointsAwarded,
-          isMakeup: body.isMakeup,
+          // Re-enforces the pre-check above at the DB level: two
+          // near-simultaneous requests could otherwise both pass that
+          // findFirst before either had committed a row.
+          dailyDedupeKey: task.type === "daily" ? `${task.id}:${member.id}:${completedLocalDate}` : undefined,
         },
       });
 
-      if (task.type === "extra_quota") {
-        await tx.taskTemplate.update({
-          where: { id: task.id },
+      if (task.type === "extra_quota" && task.quotaTotal !== null) {
+        // Guarded (not a blind increment) so two concurrent completions
+        // right at the quota edge can't both succeed and push quotaUsed
+        // past quotaTotal.
+        const updated = await tx.taskTemplate.updateMany({
+          where: { id: task.id, quotaUsed: { lt: task.quotaTotal } },
           data: { quotaUsed: { increment: 1 } },
         });
+        if (updated.count === 0) {
+          throw new ApiError(409, "此任務額度已用完");
+        }
       }
 
       let stampReward = null;
@@ -142,17 +151,26 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
         if (!existingUnlock) {
           const reward = await tx.reward.findUnique({ where: { id: overrideRewardId } });
           if (reward && (reward.stockTotal === null || (reward.stockRemaining ?? 0) > 0)) {
-            await tx.rewardUnlock.create({
-              data: { rewardId: overrideRewardId, roomMemberId: member.id },
-            });
+            // Guarded decrement (not blind), same as checkRewardUnlocks —
+            // stops two concurrent grants from taking stock below zero.
+            let stockGranted = true;
             if (reward.stockTotal !== null) {
-              const updated = await tx.reward.update({
-                where: { id: overrideRewardId },
+              const updated = await tx.reward.updateMany({
+                where: { id: overrideRewardId, stockRemaining: { gt: 0 } },
                 data: { stockRemaining: { decrement: 1 } },
               });
-              if ((updated.stockRemaining ?? 0) <= 0) exhaustedRewardIds.push(overrideRewardId);
+              stockGranted = updated.count > 0;
+              if (stockGranted) {
+                const fresh = await tx.reward.findUniqueOrThrow({ where: { id: overrideRewardId } });
+                if ((fresh.stockRemaining ?? 0) <= 0) exhaustedRewardIds.push(overrideRewardId);
+              }
             }
-            unlockedRewardIds.push(overrideRewardId);
+            if (stockGranted) {
+              await tx.rewardUnlock.create({
+                data: { rewardId: overrideRewardId, roomMemberId: member.id },
+              });
+              unlockedRewardIds.push(overrideRewardId);
+            }
           }
         }
       }
@@ -197,6 +215,12 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
       { status: 201 }
     );
   } catch (err) {
+    // The dailyDedupeKey unique constraint is the safety net for the
+    // findFirst check above — two near-simultaneous requests can both
+    // pass that check, but only one can win the DB insert.
+    if (typeof err === "object" && err !== null && "code" in err && err.code === "P2002") {
+      return handleApiError(new ApiError(409, "今天已經完成過這項任務了"));
+    }
     return handleApiError(err);
   }
 }

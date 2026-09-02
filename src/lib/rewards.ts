@@ -31,16 +31,22 @@ export async function checkRewardUnlocks(
     const met = await isConditionMet(tx, assignment, params.roomMemberId);
     if (!met) continue;
 
+    // Guarded decrement (not blind): stock is shared across the room, so
+    // two members could both pass the stockRemaining>0 check above at
+    // once — only one may actually take the last unit.
+    if (reward.stockTotal !== null) {
+      const updated = await tx.reward.updateMany({
+        where: { id: reward.id, stockRemaining: { gt: 0 } },
+        data: { stockRemaining: { decrement: 1 } },
+      });
+      if (updated.count === 0) continue;
+      const fresh = await tx.reward.findUniqueOrThrow({ where: { id: reward.id } });
+      if ((fresh.stockRemaining ?? 0) <= 0) exhaustedRewardIds.push(reward.id);
+    }
+
     await tx.rewardUnlock.create({
       data: { rewardId: reward.id, roomMemberId: params.roomMemberId },
     });
-    if (reward.stockTotal !== null) {
-      const updated = await tx.reward.update({
-        where: { id: reward.id },
-        data: { stockRemaining: { decrement: 1 } },
-      });
-      if ((updated.stockRemaining ?? 0) <= 0) exhaustedRewardIds.push(reward.id);
-    }
     unlockedRewardIds.push(reward.id);
   }
 

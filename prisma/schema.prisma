@@ -259,7 +259,11 @@ model TaskCompletion {
   pointsAwarded           Int             @map("points_awarded")
   rewardId                Int?            @map("reward_id")
   reward                  Reward?         @relation(fields: [rewardId], references: [id])
-  isMakeup                Boolean         @default(false) @map("is_makeup")
+  // Set only for type:"daily" completions, to "{taskTemplateId}:{roomMemberId}:{completedLocalDate}" —
+  // a nullable unique column (SQLite allows unlimited NULLs in a UNIQUE
+  // index) closes the race where two near-simultaneous requests both pass
+  // the pre-check and would otherwise double-award the same daily task.
+  dailyDedupeKey          String?         @unique @map("daily_dedupe_key")
   triggeredSurpriseTaskId Int?            @unique @map("triggered_surprise_task_id")
   triggeredSurpriseTask   TaskCompletion? @relation("SurpriseTrigger", fields: [triggeredSurpriseTaskId], references: [id])
   triggeredBy             TaskCompletion? @relation("SurpriseTrigger")

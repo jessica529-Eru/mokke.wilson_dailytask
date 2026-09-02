@@ -45,8 +45,6 @@ export const completeTaskSchema = z.object({
   // server-computed date since only the client reliably knows the member's
   // timezone (section 10.12) — falls back to Room.settlementTimezone if omitted.
   completedLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  isMakeup: z.boolean().default(false),
-  makeupForDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   // Section 10.9: the produced_content "stamp" from a proof completion is
   // private to its producer by default (RewardUnlock is only ever created
   // for them). The partner only ever sees it by earning it — completing
