@@ -6,7 +6,6 @@ import { handleApiError } from "@/lib/api";
 import { imageUrlSchema } from "@/lib/zodHelpers";
 
 const assignmentSchema = z.object({
-  taskTemplateId: z.number().int().optional(),
   unlockConditionType: z.enum(["single_task", "multi_task_threshold", "streak_days"]),
   unlockConditionValue: z.record(z.string(), z.unknown()),
 });
@@ -95,7 +94,6 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
         await tx.rewardAssignment.create({
           data: {
             rewardId: reward.id,
-            taskTemplateId: body.assignment.taskTemplateId,
             unlockConditionType: body.assignment.unlockConditionType,
             unlockConditionValue: JSON.stringify(body.assignment.unlockConditionValue),
           },

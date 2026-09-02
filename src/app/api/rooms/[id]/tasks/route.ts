@@ -170,7 +170,6 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/rooms/[id]/
         await tx.rewardAssignment.create({
           data: {
             rewardId: boundReward.id,
-            taskTemplateId: task.id,
             unlockConditionType: "single_task",
             unlockConditionValue: JSON.stringify({ taskId: task.id }),
           },

@@ -242,7 +242,6 @@ model TaskTemplate {
 
   completions       TaskCompletion[]
   approvalRequests  TaskApprovalRequest[]
-  rewardAssignments RewardAssignment[]
 
   @@map("task_templates")
 }
@@ -318,8 +317,11 @@ model RewardAssignment {
   id                   Int                 @id @default(autoincrement())
   rewardId             Int                 @map("reward_id")
   reward               Reward              @relation(fields: [rewardId], references: [id], onDelete: Cascade)
-  taskTemplateId       Int?                @map("task_template_id")
-  taskTemplate         TaskTemplate?       @relation(fields: [taskTemplateId], references: [id])
+  // Which task(s) trigger this condition lives in unlockConditionValue's
+  // taskId/taskIds (see isConditionMet in lib/rewards.ts) — a separate
+  // taskTemplateId column used to sit here too, written by one creation
+  // path and not the other, and never read by anything. Removed rather
+  // than fixed, since the JSON value was already the single source of truth.
   unlockConditionType  UnlockConditionType @map("unlock_condition_type")
   unlockConditionValue String              @map("unlock_condition_value") // JSON
   createdAt            DateTime            @default(now()) @map("created_at")
